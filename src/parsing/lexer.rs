@@ -27,6 +27,12 @@ pub enum Token {
     #[token("^")]
     Pow,
 
+    #[token("!")]
+    ExclMark,
+
+    #[token("=")]
+    Assign,
+
     #[token("(")]
     OpenParen,
     #[token(")")]
@@ -78,6 +84,8 @@ impl Token {
             Token::Div => "/",
             Token::Mod => "%",
             Token::Pow => "^",
+            Token::ExclMark => "!",
+            Token::Assign => "=",
             Token::Ident => "identifier",
             Token::Error => "unexpected character",
             Token::Eof => "end of file",

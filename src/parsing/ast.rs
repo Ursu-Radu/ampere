@@ -7,7 +7,7 @@ use super::lexer::Token;
 #[derive(Clone, Debug)]
 pub struct ExprNode {
     pub span: CodeSpan,
-    expr: Box<Expression>,
+    pub expr: Box<Expression>,
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +19,8 @@ pub enum Expression {
 
     Op(ExprNode, Token, ExprNode),
     Unary(Token, ExprNode),
+
+    Var(Spur),
 
     If {
         branches: Vec<(ExprNode, ListNode)>,
@@ -37,13 +39,14 @@ impl Expression {
 #[derive(Clone, Debug)]
 pub struct StmtNode {
     pub span: CodeSpan,
-    stmt: Box<Statement>,
+    pub stmt: Box<Statement>,
 }
 
 #[derive(Clone, Debug)]
 pub enum Statement {
     Expr(ExprNode),
     Let(Spur, ExprNode),
+    Print(ExprNode),
 }
 impl Statement {
     pub fn to_node(self, span: CodeSpan) -> StmtNode {
@@ -57,7 +60,7 @@ impl Statement {
 #[derive(Clone, Debug)]
 pub struct ListNode {
     pub span: CodeSpan,
-    list: Box<StatementList>,
+    pub list: Box<StatementList>,
 }
 
 #[derive(Clone, Debug)]

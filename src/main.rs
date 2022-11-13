@@ -3,7 +3,15 @@
 
 use std::{fs, io::Write, path::PathBuf};
 
-use crate::{errors::ToReport, parsing::parser::Parser, sources::AmpereSource};
+use ahash::AHashMap;
+use lasso::Rodeo;
+
+use crate::{
+    errors::ToReport,
+    parsing::parser::Parser,
+    runtime::interpreter::{Interpreter, Scope},
+    sources::AmpereSource,
+};
 
 mod errors;
 mod parsing;
@@ -18,11 +26,26 @@ fn main() {
 
     let code = fs::read_to_string(&path).unwrap();
     let src = AmpereSource::File(path);
-    let mut parser = Parser::new(&code, &src);
+    let interner = Rodeo::new();
+    let mut parser = Parser::new(&code, &src, interner);
 
-    match parser.parse_stmts() {
+    match parser.parse() {
         Ok(e) => {
-            println!("{:#?}", e)
+            let mut interpreter = Interpreter::new(&src, parser.interner);
+            let global_scope = interpreter.scopes.insert(Scope {
+                vars: AHashMap::new(),
+                parent: None,
+            });
+            match interpreter.execute_list(&e, global_scope) {
+                Ok(k) => {
+                    println!("-> {}", interpreter.value_str(k))
+                }
+                Err(err) => {
+                    let err = err.to_report();
+                    println!("{:#?}", err)
+                }
+            }
+            // println!("{:#?}", e)
         }
         Err(err) => {
             let err = err.to_report();

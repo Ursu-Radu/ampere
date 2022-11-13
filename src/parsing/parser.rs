@@ -1,3 +1,4 @@
+use lasso::{Rodeo, Spur};
 use logos::{Lexer, Logos};
 
 use crate::sources::{AmpereSource, CodeArea, CodeSpan};
@@ -12,14 +13,16 @@ use super::{
 pub struct Parser<'a> {
     pub lexer: Lexer<'a, Token>,
     pub source: AmpereSource,
+    pub interner: Rodeo,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(code: &'a str, source: &AmpereSource) -> Self {
+    pub fn new(code: &'a str, source: &AmpereSource, interner: Rodeo) -> Self {
         let lexer = Token::lexer(code);
         Parser {
             lexer,
             source: source.clone(),
+            interner,
         }
     }
 
@@ -31,6 +34,10 @@ impl<'a> Parser<'a> {
     }
     pub fn slice(&self) -> &str {
         self.lexer.slice()
+    }
+    pub fn slice_interned(&mut self) -> Spur {
+        let s = self.lexer.slice();
+        self.interner.get_or_intern(s)
     }
     pub fn peek(&self) -> Token {
         let mut peek = self.lexer.clone();
@@ -75,7 +82,7 @@ impl<'a> Parser<'a> {
                 Ok(Expression::Float(self.slice().parse::<f64>().unwrap()).to_node(self.span()))
             }
 
-            Token::String => Ok(Expression::String(self.slice().to_string()).to_node(self.span())),
+            Token::String => Ok(Expression::String(self.slice().into()).to_node(self.span())),
 
             Token::True => Ok(Expression::Bool(true).to_node(self.span())),
             Token::False => Ok(Expression::Bool(false).to_node(self.span())),
@@ -86,6 +93,7 @@ impl<'a> Parser<'a> {
                 inner.span = start.extend(self.span());
                 Ok(inner)
             }
+            Token::Ident => Ok(Expression::Var(self.slice_interned()).to_node(self.span())),
             Token::If => {
                 let start = self.span();
 
@@ -175,7 +183,16 @@ impl<'a> Parser<'a> {
         let stmt = match self.peek() {
             Token::Let => {
                 self.next();
-                todo!()
+                self.expect_tok_named(Token::Ident, "variable name")?;
+                let s = self.slice_interned();
+                self.expect_tok(Token::Assign)?;
+                let value = self.parse_expr()?;
+                Statement::Let(s, value)
+            }
+            Token::Print => {
+                self.next();
+                let value = self.parse_expr()?;
+                Statement::Print(value)
             }
             _ => {
                 let expr = self.parse_expr()?;
@@ -206,5 +223,11 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(StatementList::Normal(stmts).to_node(span))
+    }
+
+    pub fn parse(&mut self) -> Result<ListNode, SyntaxError> {
+        let list = self.parse_stmts()?;
+        self.expect_tok(Token::Eof)?;
+        Ok(list)
     }
 }

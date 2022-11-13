@@ -61,6 +61,7 @@ macro_rules! operators {
 }
 
 operators! {
+    Right => [Assign];
     Left => [Plus, Minus];
     Unary => [Minus];
     Left => [Mult, Div, Mod];
