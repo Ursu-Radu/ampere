@@ -7,7 +7,6 @@ use ahash::AHashMap;
 use lasso::Rodeo;
 
 use crate::{
-    errors::ToReport,
     parsing::parser::Parser,
     runtime::interpreter::{Interpreter, Scope},
     sources::AmpereSource,
@@ -41,7 +40,7 @@ fn main() {
                     println!("-> {}", interpreter.value_str(k))
                 }
                 Err(err) => {
-                    let err = err.to_report();
+                    let err = err.to_report(&interpreter);
                     println!("{:#?}", err)
                 }
             }

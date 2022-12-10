@@ -32,6 +32,31 @@ pub enum Token {
 
     #[token("=")]
     Assign,
+    #[token("==")]
+    Eq,
+    #[token("!=")]
+    NotEq,
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEq,
+    #[token("<")]
+    Lesser,
+    #[token("<=")]
+    LesserEq,
+
+    #[token("+=")]
+    PlusEq,
+    #[token("-=")]
+    MinusEq,
+    #[token("*=")]
+    MultEq,
+    #[token("/=")]
+    DivEq,
+    #[token("%=")]
+    ModEq,
+    #[token("^=")]
+    PowEq,
 
     #[token("(")]
     OpenParen,
@@ -86,6 +111,18 @@ impl Token {
             Token::Pow => "^",
             Token::ExclMark => "!",
             Token::Assign => "=",
+            Token::Eq => "==",
+            Token::NotEq => "!=",
+            Token::Greater => ">",
+            Token::GreaterEq => ">=",
+            Token::Lesser => "<",
+            Token::LesserEq => "<=",
+            Token::PlusEq => "+=",
+            Token::MinusEq => "-=",
+            Token::MultEq => "*=",
+            Token::DivEq => "/=",
+            Token::ModEq => "%=",
+            Token::PowEq => "^=",
             Token::Ident => "identifier",
             Token::Error => "unexpected character",
             Token::Eof => "end of file",

@@ -7,14 +7,15 @@ pub struct ErrorReport {
     pub labels: Vec<(CodeArea, String)>,
 }
 
-pub trait ToReport {
-    fn to_report(&self) -> ErrorReport;
-}
-
 #[macro_export]
 macro_rules! error_maker {
     (
-        Title: $title:literal;
+        Title: $title:literal
+        Extra: {
+            $(
+                $extra_arg:ident: $extra_type:ty,
+            )*
+        }
         pub enum $enum:ident {
             $(
                 #[
@@ -43,9 +44,9 @@ macro_rules! error_maker {
                 },
             )*
         }
-        use $crate::errors::{ToReport, ErrorReport};
-        impl ToReport for $enum {
-            fn to_report(&self) -> ErrorReport {
+        use $crate::errors::ErrorReport;
+        impl $enum {
+            pub fn to_report(&self $(, $extra_arg: $extra_type)* ) -> ErrorReport {
                 match self {
                     $(
                         $enum::$err_name { $($field,)* } => ErrorReport {

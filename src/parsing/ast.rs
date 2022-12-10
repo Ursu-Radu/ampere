@@ -28,7 +28,7 @@ pub enum Expression {
     },
 }
 impl Expression {
-    pub fn to_node(self, span: CodeSpan) -> ExprNode {
+    pub fn into_node(self, span: CodeSpan) -> ExprNode {
         ExprNode {
             span,
             expr: Box::new(self),

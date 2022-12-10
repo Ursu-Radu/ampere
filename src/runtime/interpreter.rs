@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     error::RuntimeError,
-    value::{value_ops, StoredValue, Value},
+    value::{value_ops, Value},
 };
 
 new_key_type! {
@@ -29,7 +29,7 @@ pub struct Interpreter {
     pub interner: Rodeo,
     pub source: AmpereSource,
 
-    pub memory: SlotMap<ValueKey, StoredValue>,
+    pub memory: SlotMap<ValueKey, Value>,
     pub scopes: SlotMap<ScopeKey, Scope>,
 }
 
@@ -60,20 +60,20 @@ impl Interpreter {
         }
     }
     pub fn new_unit(&mut self, span: CodeSpan) -> ValueKey {
-        self.memory.insert(Value::unit().into_stored(span))
+        self.memory.insert(Value::unit())
     }
-    pub fn clone_value(&mut self, k: ValueKey, span: CodeSpan) -> StoredValue {
-        self.memory[k].clone_redef(span)
+    pub fn clone_value(&mut self, k: ValueKey) -> Value {
+        self.memory[k].clone()
     }
-    pub fn clone_key(&mut self, k: ValueKey, span: CodeSpan) -> ValueKey {
-        self.memory.insert(self.memory[k].clone_redef(span))
+    pub fn clone_key(&mut self, k: ValueKey) -> ValueKey {
+        self.memory.insert(self.memory[k].clone())
     }
     pub fn value_str(&self, key: ValueKey) -> String {
         let mut passed = vec![];
         fn inner(interpreter: &Interpreter, key: ValueKey, passed: &mut Vec<ValueKey>) -> String {
             passed.push(key);
 
-            let s = match &interpreter.memory[key].value {
+            let s = match &interpreter.memory[key] {
                 Value::Int(v) => v.to_string(),
                 Value::Float(v) => v.to_string(),
                 Value::String(v) => v.to_string(),
@@ -103,72 +103,165 @@ impl Interpreter {
         scope: ScopeKey,
     ) -> Result<ValueKey, RuntimeError> {
         match &*node.expr {
-            Expression::Int(n) => Ok(self.memory.insert(Value::Int(*n).into_stored(node.span))),
-            Expression::Float(f) => Ok(self.memory.insert(Value::Float(*f).into_stored(node.span))),
-            Expression::String(s) => Ok(self
-                .memory
-                .insert(Value::String(s.clone()).into_stored(node.span))),
-            Expression::Bool(b) => Ok(self.memory.insert(Value::Bool(*b).into_stored(node.span))),
+            Expression::Int(n) => Ok(self.memory.insert(Value::Int(*n))),
+            Expression::Float(f) => Ok(self.memory.insert(Value::Float(*f))),
+            Expression::String(s) => Ok(self.memory.insert(Value::String(s.clone()))),
+            Expression::Bool(b) => Ok(self.memory.insert(Value::Bool(*b))),
             Expression::Op(left, op, right) => {
                 let left_key = self.execute_expr(left, scope)?;
                 let right_key = self.execute_expr(right, scope)?;
 
                 let result = match op {
                     Token::Plus => value_ops::plus(
-                        &self.memory[left_key],
-                        &self.memory[right_key],
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
                         node.span,
                         self,
                     ),
                     Token::Minus => value_ops::minus(
-                        &self.memory[left_key],
-                        &self.memory[right_key],
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
                         node.span,
                         self,
                     ),
                     Token::Mult => value_ops::mult(
-                        &self.memory[left_key],
-                        &self.memory[right_key],
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
                         node.span,
                         self,
                     ),
                     Token::Div => value_ops::div(
-                        &self.memory[left_key],
-                        &self.memory[right_key],
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
                         node.span,
                         self,
                     ),
                     Token::Mod => value_ops::modulo(
-                        &self.memory[left_key],
-                        &self.memory[right_key],
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::Eq => value_ops::eq_op(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::NotEq => value_ops::not_eq_op(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::Greater => value_ops::greater(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::GreaterEq => value_ops::greater_eq(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::Lesser => value_ops::lesser(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::LesserEq => value_ops::lesser_eq(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
                         node.span,
                         self,
                     ),
                     Token::Assign => {
-                        let v = self.clone_value(right_key, right.span);
-                        let ret = v.value.clone();
-                        self.memory[left_key] = v;
-                        Ok(ret)
+                        let v = self.clone_value(right_key);
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::PlusEq => {
+                        let v = value_ops::plus(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::MinusEq => {
+                        let v = value_ops::minus(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::MultEq => {
+                        let v = value_ops::mult(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::DivEq => {
+                        let v = value_ops::div(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::PowEq => {
+                        let v = value_ops::pow(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
+                    }
+                    Token::ModEq => {
+                        let v = value_ops::modulo(
+                            (&self.memory[left_key], left.span),
+                            (&self.memory[right_key], right.span),
+                            node.span,
+                            self,
+                        )?;
+                        self.memory[left_key] = v.clone();
+                        Ok(v)
                     }
                     _ => unreachable!(),
                 }?;
 
-                Ok(self.memory.insert(result.into_stored(node.span)))
+                Ok(self.memory.insert(result))
             }
             Expression::Unary(op, v) => {
                 let value_key = self.execute_expr(v, scope)?;
 
                 let result = match op {
                     Token::Minus => {
-                        value_ops::unary_minus(&self.memory[value_key], node.span, self)
+                        value_ops::unary_minus((&self.memory[value_key], v.span), node.span, self)
                     }
                     Token::ExclMark => {
-                        value_ops::unary_not(&self.memory[value_key], node.span, self)
+                        value_ops::unary_not((&self.memory[value_key], v.span), node.span, self)
                     }
                     _ => unreachable!(),
                 }?;
 
-                Ok(self.memory.insert(result.into_stored(node.span)))
+                Ok(self.memory.insert(result))
             }
             Expression::If {
                 branches,
@@ -192,7 +285,7 @@ impl Interpreter {
             Statement::Expr(e) => self.execute_expr(e, scope),
             Statement::Let(name, e) => {
                 let k = self.execute_expr(e, scope)?;
-                let k = self.clone_key(k, e.span);
+                let k = self.clone_key(k);
                 self.scopes[scope].vars.insert(*name, k);
                 Ok(self.new_unit(node.span))
             }

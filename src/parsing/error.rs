@@ -3,7 +3,8 @@ use crate::{error_maker, sources::CodeArea};
 use super::lexer::Token;
 
 error_maker! {
-    Title: "Syntax Error";
+    Title: "Syntax Error"
+    Extra: {}
     pub enum SyntaxError {
         #[
             Message: "Unexpected token",

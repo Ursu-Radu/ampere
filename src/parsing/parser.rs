@@ -75,17 +75,21 @@ impl<'a> Parser<'a> {
         let unary;
         match self.next() {
             Token::Int => {
-                Ok(Expression::Int(self.slice().parse::<i64>().unwrap()).to_node(self.span()))
+                Ok(Expression::Int(self.slice().parse::<i64>().unwrap()).into_node(self.span()))
             }
 
             Token::Float => {
-                Ok(Expression::Float(self.slice().parse::<f64>().unwrap()).to_node(self.span()))
+                Ok(Expression::Float(self.slice().parse::<f64>().unwrap()).into_node(self.span()))
             }
 
-            Token::String => Ok(Expression::String(self.slice().into()).to_node(self.span())),
+            Token::String => Ok(Expression::String({
+                let s = self.slice();
+                s[1..s.len() - 1].into()
+            })
+            .into_node(self.span())),
 
-            Token::True => Ok(Expression::Bool(true).to_node(self.span())),
-            Token::False => Ok(Expression::Bool(false).to_node(self.span())),
+            Token::True => Ok(Expression::Bool(true).into_node(self.span())),
+            Token::False => Ok(Expression::Bool(false).into_node(self.span())),
             Token::OpenParen => {
                 let start = self.span();
                 let mut inner = self.parse_expr()?;
@@ -93,7 +97,7 @@ impl<'a> Parser<'a> {
                 inner.span = start.extend(self.span());
                 Ok(inner)
             }
-            Token::Ident => Ok(Expression::Var(self.slice_interned()).to_node(self.span())),
+            Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
             Token::If => {
                 let start = self.span();
 
@@ -126,7 +130,7 @@ impl<'a> Parser<'a> {
                     branches,
                     else_branch,
                 }
-                .to_node(start.extend(self.span())))
+                .into_node(start.extend(self.span())))
             }
             unary_op
                 if {
@@ -141,7 +145,7 @@ impl<'a> Parser<'a> {
                     Some(next_prec) => self.parse_op(next_prec)?,
                     None => self.parse_unit()?,
                 };
-                Ok(Expression::Unary(unary_op, val).to_node(start.extend(self.span())))
+                Ok(Expression::Unary(unary_op, val).into_node(start.extend(self.span())))
             }
             other => Err(SyntaxError::UnexpectedToken {
                 found: other,
@@ -169,7 +173,7 @@ impl<'a> Parser<'a> {
                 self.parse_op(prec)?
             };
             let new_span = left.span.extend(right.span);
-            left = Expression::Op(left, op, right).to_node(new_span)
+            left = Expression::Op(left, op, right).into_node(new_span)
         }
         Ok(left)
     }
