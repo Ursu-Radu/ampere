@@ -4,6 +4,7 @@
 use std::{fs, io::Write, path::PathBuf};
 
 use ahash::AHashMap;
+use colored::Colorize;
 use lasso::Rodeo;
 
 use crate::{
@@ -41,14 +42,14 @@ fn main() {
                 }
                 Err(err) => {
                     let err = err.to_report(&interpreter);
-                    println!("{:#?}", err)
+                    err.display()
                 }
             }
             // println!("{:#?}", e)
         }
         Err(err) => {
             let err = err.to_report();
-            println!("{:#?}", err)
+            err.display()
         }
     }
 }

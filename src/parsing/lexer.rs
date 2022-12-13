@@ -81,8 +81,13 @@ pub enum Token {
     #[token("elif")]
     Elif,
 
+    #[token("while")]
+    While,
+
     #[token(";")]
     Semicolon,
+    #[token(",")]
+    Comma,
 
     #[token("print")]
     Print,
@@ -135,11 +140,13 @@ impl Token {
             Token::OpenBracket => "{",
             Token::ClosedBracket => "}",
             Token::Semicolon => ";",
+            Token::Comma => ",",
             Token::Print => "print",
             Token::Let => "let",
             Token::If => "if",
             Token::Else => "else",
             Token::Elif => "elif",
+            Token::While => "while",
         }
     }
 }

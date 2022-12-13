@@ -55,6 +55,14 @@ impl<'a> Parser<'a> {
             source: self.source.clone(),
         }
     }
+    pub fn skip_tok(&mut self, skip: Token) -> bool {
+        if self.peek() == skip {
+            self.next();
+            true
+        } else {
+            false
+        }
+    }
 
     pub fn expect_tok_named(&mut self, expect: Token, name: &str) -> Result<(), SyntaxError> {
         let next = self.next();
@@ -90,14 +98,45 @@ impl<'a> Parser<'a> {
 
             Token::True => Ok(Expression::Bool(true).into_node(self.span())),
             Token::False => Ok(Expression::Bool(false).into_node(self.span())),
+            Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
             Token::OpenParen => {
                 let start = self.span();
+                if self.peek() == Token::ClosedParen {
+                    self.next();
+                    return Ok(Expression::Tuple(vec![]).into_node(start.extend(self.span())));
+                }
                 let mut inner = self.parse_expr()?;
-                self.expect_tok(Token::ClosedParen)?;
-                inner.span = start.extend(self.span());
-                Ok(inner)
+                if self.peek() == Token::Comma {
+                    self.next();
+                    let mut elems = vec![inner];
+                    while self.peek() != Token::ClosedParen {
+                        elems.push(self.parse_expr()?);
+                        if !self.skip_tok(Token::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect_tok(Token::ClosedParen)?;
+
+                    Ok(Expression::Tuple(elems).into_node(start.extend(self.span())))
+                } else {
+                    self.expect_tok(Token::ClosedParen)?;
+                    inner.span = start.extend(self.span());
+                    Ok(inner)
+                }
             }
-            Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
+            Token::OpenSqBracket => {
+                let start = self.span();
+                let mut elems = vec![];
+                while self.peek() != Token::ClosedSqBracket {
+                    elems.push(self.parse_expr()?);
+                    if !self.skip_tok(Token::Comma) {
+                        break;
+                    }
+                }
+                self.expect_tok(Token::ClosedSqBracket)?;
+
+                Ok(Expression::Array(elems).into_node(start.extend(self.span())))
+            }
             Token::If => {
                 let start = self.span();
 
@@ -131,6 +170,21 @@ impl<'a> Parser<'a> {
                     else_branch,
                 }
                 .into_node(start.extend(self.span())))
+            }
+            Token::OpenBracket => {
+                let start = self.span();
+                let code = self.parse_stmts()?;
+                self.expect_tok(Token::ClosedBracket)?;
+                Ok(Expression::Block(code).into_node(start.extend(self.span())))
+            }
+            Token::While => {
+                let start = self.span();
+                let cond = self.parse_expr()?;
+                self.expect_tok(Token::OpenBracket)?;
+                let code = self.parse_stmts()?;
+                self.expect_tok(Token::ClosedBracket)?;
+
+                Ok(Expression::While { code, cond }.into_node(start.extend(self.span())))
             }
             unary_op
                 if {

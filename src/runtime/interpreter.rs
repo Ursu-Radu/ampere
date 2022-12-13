@@ -68,6 +68,15 @@ impl Interpreter {
     pub fn clone_key(&mut self, k: ValueKey) -> ValueKey {
         self.memory.insert(self.memory[k].clone())
     }
+
+    pub fn derive_scope(&mut self, scope: ScopeKey) -> ScopeKey {
+        let new_scope = Scope {
+            vars: AHashMap::new(),
+            parent: Some(scope),
+        };
+        self.scopes.insert(new_scope)
+    }
+
     pub fn value_str(&self, key: ValueKey) -> String {
         let mut passed = vec![];
         fn inner(interpreter: &Interpreter, key: ValueKey, passed: &mut Vec<ValueKey>) -> String {
@@ -84,6 +93,19 @@ impl Interpreter {
                     } else {
                         format!(
                             "({})",
+                            v.iter()
+                                .map(|k| inner(interpreter, *k, passed))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                }
+                Value::Array(v) => {
+                    if passed[0..(passed.len() - 1)].contains(&key) {
+                        "[...]".into()
+                    } else {
+                        format!(
+                            "[{}]",
                             v.iter()
                                 .map(|k| inner(interpreter, *k, passed))
                                 .collect::<Vec<_>>()
@@ -263,17 +285,61 @@ impl Interpreter {
 
                 Ok(self.memory.insert(result))
             }
+            Expression::Block(stmts) => {
+                let derived = self.derive_scope(scope);
+                self.execute_list(stmts, derived)
+            }
             Expression::If {
                 branches,
                 else_branch,
-            } => todo!(),
+            } => {
+                for (cond, code) in branches {
+                    let k = self.execute_expr(cond, scope)?;
+                    if value_ops::to_bool(&self.memory[k], cond.span, self)? {
+                        let derived = self.derive_scope(scope);
+                        return self.execute_list(code, derived);
+                    }
+                }
+                if let Some(code) = else_branch {
+                    let derived = self.derive_scope(scope);
+                    self.execute_list(code, derived)
+                } else {
+                    Ok(self.new_unit(node.span))
+                }
+            }
             Expression::Var(v) => match self.get_var(scope, *v) {
                 Some(k) => Ok(k),
                 None => Err(RuntimeError::NonexistentVariable {
                     name: self.interner.resolve(v).into(),
-                    area: self.make_area(node.span),
+                    span: node.span,
                 }),
             },
+            Expression::While { cond, code } => {
+                let mut ret = self.new_unit(node.span);
+                loop {
+                    let k = self.execute_expr(cond, scope)?;
+                    if value_ops::to_bool(&self.memory[k], cond.span, self)? {
+                        let derived = self.derive_scope(scope);
+                        ret = self.execute_list(code, derived)?;
+                    } else {
+                        return Ok(ret);
+                    }
+                }
+            }
+            Expression::Array(elems) => {
+                let mut arr = vec![];
+                for i in elems {
+                    arr.push(self.execute_expr(i, scope)?);
+                }
+                Ok(self.memory.insert(Value::Array(arr)))
+            }
+            Expression::Tuple(elems) => {
+                let mut arr = vec![];
+                for i in elems {
+                    arr.push(self.execute_expr(i, scope)?);
+                }
+                Ok(self.memory.insert(Value::Tuple(arr)))
+            }
         }
     }
     pub fn execute_stmt(

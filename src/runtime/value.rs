@@ -11,6 +11,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Tuple(Vec<ValueKey>),
+    Array(Vec<ValueKey>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum ValueType {
@@ -19,6 +20,7 @@ pub enum ValueType {
     String,
     Bool,
     Tuple,
+    Array,
 }
 
 impl Value {
@@ -32,6 +34,7 @@ impl Value {
             Value::String(_) => ValueType::String,
             Value::Bool(_) => ValueType::Bool,
             Value::Tuple(_) => ValueType::Tuple,
+            Value::Array(_) => ValueType::Array,
         }
     }
 }
@@ -44,6 +47,7 @@ impl ValueType {
             ValueType::String => "string",
             ValueType::Bool => "bool",
             ValueType::Tuple => "tuple",
+            ValueType::Array => "array",
         }
         .into()
     }
@@ -88,7 +92,13 @@ pub mod value_ops {
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<bool, RuntimeError> {
-        todo!()
+        match v {
+            Value::Bool(b) => Ok(*b),
+            _ => Err(RuntimeError::BooleanConversion {
+                value: v.to_type(),
+                span,
+            }),
+        }
     }
 
     pub fn eq_op(
@@ -126,7 +136,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Plus,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -147,7 +157,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Minus,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -178,7 +188,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Mult,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -199,7 +209,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Div,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -220,7 +230,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Mod,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -243,7 +253,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Pow,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -265,7 +275,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Greater,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -286,7 +296,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Greater,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -307,7 +317,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Greater,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -328,7 +338,7 @@ pub mod value_ops {
                 left: (a.0.to_type(), a.1),
                 right: (b.0.to_type(), b.1),
                 op: Token::Greater,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -344,7 +354,7 @@ pub mod value_ops {
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::Minus,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }
@@ -358,7 +368,7 @@ pub mod value_ops {
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::ExclMark,
-                area: interpreter.make_area(span),
+                span,
             }),
         }
     }

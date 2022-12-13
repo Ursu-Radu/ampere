@@ -22,9 +22,19 @@ pub enum Expression {
 
     Var(Spur),
 
+    Block(ListNode),
+
+    Array(Vec<ExprNode>),
+    Tuple(Vec<ExprNode>),
+
     If {
         branches: Vec<(ExprNode, ListNode)>,
         else_branch: Option<ListNode>,
+    },
+
+    While {
+        cond: ExprNode,
+        code: ListNode,
     },
 }
 impl Expression {
