@@ -69,4 +69,5 @@ operators! {
     Unary => [Minus];
     Left => [Mult, Div, Mod];
     Right => [Pow];
+    Left => [Is];
 }

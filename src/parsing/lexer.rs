@@ -86,11 +86,19 @@ pub enum Token {
 
     #[token(";")]
     Semicolon,
+    #[token(":")]
+    Colon,
     #[token(",")]
     Comma,
 
+    #[token(".")]
+    Dot,
+
     #[token("print")]
     Print,
+
+    #[token("is")]
+    Is,
 
     #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*")]
     Ident,
@@ -140,8 +148,11 @@ impl Token {
             Token::OpenBracket => "{",
             Token::ClosedBracket => "}",
             Token::Semicolon => ";",
+            Token::Colon => ":",
             Token::Comma => ",",
+            Token::Dot => ".",
             Token::Print => "print",
+            Token::Is => "is",
             Token::Let => "let",
             Token::If => "if",
             Token::Else => "else",

@@ -61,5 +61,50 @@ error_maker! {
             value: ValueType,
             span: CodeSpan,
         }
+        #[
+            Message: "Invalid index for base",
+            Labels: [
+                interpreter.make_area(*span) => "Cannot index {} with {}": base.0.name(), index.0.name();
+                interpreter.make_area(base.1) => "This is of type {}": base.0.name();
+                interpreter.make_area(index.1) => "This is of type {}": index.0.name();
+            ]
+        ]
+        CannotIndex {
+            base: (ValueType, CodeSpan),
+            index: (ValueType, CodeSpan),
+            span: CodeSpan,
+        }
+        #[
+            Message: "Index out of bounds",
+            Labels: [
+                interpreter.make_area(*span) => "Index {} is out of bounds": index;
+            ]
+        ]
+        IndexOutOfBounds {
+            index: i64,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Nonexistent key",
+            Labels: [
+                interpreter.make_area(*span) => r#"Key "{}" does not exist"#: key;
+            ]
+        ]
+        NonexistentKey {
+            key: String,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Nonexistent member",
+            Labels: [
+                interpreter.make_area(*span) => r#"Member "{}" does not exist on type {}"#: member, base.0.name();
+                interpreter.make_area(base.1) => r#"This is of type {}"#: base.0.name();
+            ]
+        ]
+        NonexistentMember {
+            base: (ValueType, CodeSpan),
+            member: String,
+            span: CodeSpan,
+        }
     }
 }

@@ -79,16 +79,28 @@ impl Interpreter {
 
     pub fn value_str(&self, key: ValueKey) -> String {
         let mut passed = vec![];
-        fn inner(interpreter: &Interpreter, key: ValueKey, passed: &mut Vec<ValueKey>) -> String {
-            passed.push(key);
+        fn inner<'a>(
+            interpreter: &'a Interpreter,
+            key: ValueKey,
+            passed: &mut Vec<&'a Value>,
+        ) -> String {
+            // passed.push(key);
 
-            let s = match &interpreter.memory[key] {
+            let val = &interpreter.memory[key];
+            let contains = if passed.is_empty() {
+                false
+            } else {
+                passed.contains(&val)
+            };
+            passed.push(val);
+
+            let s = match val {
                 Value::Int(v) => v.to_string(),
                 Value::Float(v) => v.to_string(),
                 Value::String(v) => v.to_string(),
                 Value::Bool(v) => v.to_string(),
                 Value::Tuple(v) => {
-                    if passed[0..(passed.len() - 1)].contains(&key) {
+                    if contains {
                         "(...)".into()
                     } else {
                         format!(
@@ -101,7 +113,7 @@ impl Interpreter {
                     }
                 }
                 Value::Array(v) => {
-                    if passed[0..(passed.len() - 1)].contains(&key) {
+                    if contains {
                         "[...]".into()
                     } else {
                         format!(
@@ -113,6 +125,20 @@ impl Interpreter {
                         )
                     }
                 }
+                Value::Dict(v) => {
+                    if contains {
+                        "{...}".into()
+                    } else {
+                        format!(
+                            "{{{}}}",
+                            v.iter()
+                                .map(|(k, v)| format!("{}: {}", k, inner(interpreter, *v, passed)))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                }
+                Value::Type(t) => format!("<type: {}>", t.name()),
             };
             passed.pop();
             s
@@ -159,6 +185,12 @@ impl Interpreter {
                         self,
                     ),
                     Token::Mod => value_ops::modulo(
+                        (&self.memory[left_key], left.span),
+                        (&self.memory[right_key], right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::Pow => value_ops::pow(
                         (&self.memory[left_key], left.span),
                         (&self.memory[right_key], right.span),
                         node.span,
@@ -339,6 +371,46 @@ impl Interpreter {
                     arr.push(self.execute_expr(i, scope)?);
                 }
                 Ok(self.memory.insert(Value::Tuple(arr)))
+            }
+            Expression::Dict(map) => {
+                let mut dict = AHashMap::new();
+                for (k, v) in map {
+                    dict.insert(
+                        self.interner.resolve(k).into(),
+                        self.execute_expr(v, scope)?,
+                    );
+                }
+                Ok(self.memory.insert(Value::Dict(dict)))
+            }
+            Expression::Index(base, index) => {
+                let base_key = self.execute_expr(base, scope)?;
+                let index_key = self.execute_expr(index, scope)?;
+
+                value_ops::index(
+                    (&self.memory[base_key].clone(), base.span),
+                    (&self.memory[index_key].clone(), index.span),
+                    node.span,
+                    self,
+                )
+            }
+            Expression::Member(base, s) => {
+                let base_key = self.execute_expr(base, scope)?;
+                match (&self.memory[base_key], self.interner.resolve(s)) {
+                    (Value::String(s), "length") => {
+                        Ok(self.memory.insert(Value::Int(s.chars().count() as i64)))
+                    }
+                    (Value::Array(arr), "length") => {
+                        Ok(self.memory.insert(Value::Int(arr.len() as i64)))
+                    }
+                    (Value::Dict(map), "length") => {
+                        Ok(self.memory.insert(Value::Int(map.len() as i64)))
+                    }
+                    (v, m) => Err(RuntimeError::NonexistentMember {
+                        base: (v.to_type(), base.span),
+                        member: m.into(),
+                        span: node.span,
+                    }),
+                }
             }
         }
     }

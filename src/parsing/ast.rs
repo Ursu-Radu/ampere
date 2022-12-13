@@ -1,3 +1,4 @@
+use ahash::AHashMap;
 use lasso::Spur;
 
 use crate::sources::CodeSpan;
@@ -27,6 +28,8 @@ pub enum Expression {
     Array(Vec<ExprNode>),
     Tuple(Vec<ExprNode>),
 
+    Dict(AHashMap<Spur, ExprNode>),
+
     If {
         branches: Vec<(ExprNode, ListNode)>,
         else_branch: Option<ListNode>,
@@ -36,6 +39,9 @@ pub enum Expression {
         cond: ExprNode,
         code: ListNode,
     },
+
+    Index(ExprNode, ExprNode),
+    Member(ExprNode, Spur),
 }
 impl Expression {
     pub fn into_node(self, span: CodeSpan) -> ExprNode {

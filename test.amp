@@ -1,5 +1,6 @@
 
-
-print () + 3;
+if true {
+    print (type);
+}
 
 

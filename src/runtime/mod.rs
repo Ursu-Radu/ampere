@@ -1,3 +1,3 @@
 mod error;
 pub mod interpreter;
-mod value;
+pub mod value;

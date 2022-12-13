@@ -1,62 +1,86 @@
+use ahash::AHashMap;
 use lasso::Spur;
 
 use crate::sources::CodeSpan;
 
-use super::interpreter::{self, Interpreter, ValueKey};
+use super::interpreter::{self, Interpreter, ScopeKey, ValueKey};
 
-#[derive(Debug, Clone)]
-pub enum Value {
-    Int(i64),
-    Float(f64),
-    String(String),
-    Bool(bool),
-    Tuple(Vec<ValueKey>),
-    Array(Vec<ValueKey>),
+macro_rules! values {
+    (
+        $(
+            $name:ident $data:tt: $str:literal,
+        )*
+    ) => {
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Value {
+            $(
+                $name $data,
+            )*
+        }
+        #[derive(Debug, Clone, PartialEq, Copy)]
+        pub enum ValueType {
+            $(
+                $name,
+            )*
+        }
+
+        impl Value {
+            pub fn to_type(&self) -> ValueType {
+                match self {
+                    $(
+                        Value::$name {..} => ValueType::$name,
+                    )*
+                }
+            }
+        }
+
+        impl ValueType {
+            pub fn name(self) -> String {
+                match self {
+                    $(
+                        ValueType::$name => $str,
+                    )*
+                }
+                .into()
+            }
+            pub fn populate_scope(interpreter: &mut Interpreter, scope: ScopeKey) {
+                let scope = &mut interpreter.scopes[scope];
+
+                $(
+                    scope.vars.insert(
+                        interpreter.interner.get_or_intern($str),
+                        interpreter.memory.insert(Value::Type(ValueType::$name)),
+                    );
+                )*
+            }
+        }
+    };
 }
-#[derive(Debug, Clone, Copy)]
-pub enum ValueType {
-    Int,
-    Float,
-    String,
-    Bool,
-    Tuple,
-    Array,
+
+values! {
+    Int(i64): "int",
+    Float(f64): "float",
+    String(String): "string",
+    Bool(bool): "bool",
+    Tuple(Vec<ValueKey>): "tuple",
+    Array(Vec<ValueKey>): "array",
+    Dict(AHashMap<String, ValueKey>): "dict",
+    Type(ValueType): "type",
 }
 
 impl Value {
     pub fn unit() -> Self {
         Value::Tuple(vec![])
     }
-    pub fn to_type(&self) -> ValueType {
-        match self {
-            Value::Int(_) => ValueType::Int,
-            Value::Float(_) => ValueType::Float,
-            Value::String(_) => ValueType::String,
-            Value::Bool(_) => ValueType::Bool,
-            Value::Tuple(_) => ValueType::Tuple,
-            Value::Array(_) => ValueType::Array,
-        }
-    }
-}
-
-impl ValueType {
-    pub fn name(self) -> String {
-        match self {
-            ValueType::Int => "int",
-            ValueType::Float => "float",
-            ValueType::String => "string",
-            ValueType::Bool => "bool",
-            ValueType::Tuple => "tuple",
-            ValueType::Array => "array",
-        }
-        .into()
-    }
 }
 
 pub mod value_ops {
     use crate::{
         parsing::lexer::Token,
-        runtime::{error::RuntimeError, interpreter::Interpreter},
+        runtime::{
+            error::RuntimeError,
+            interpreter::{Interpreter, ValueKey},
+        },
         sources::CodeSpan,
     };
 
@@ -368,6 +392,48 @@ pub mod value_ops {
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::ExclMark,
+                span,
+            }),
+        }
+    }
+
+    pub fn index(
+        base: (&Value, CodeSpan),
+        index: (&Value, CodeSpan),
+        span: CodeSpan,
+        interpreter: &mut Interpreter,
+    ) -> Result<ValueKey, RuntimeError> {
+        match (base.0, index.0) {
+            (Value::Array(arr), Value::Int(n)) => {
+                let idx = if *n < 0 { arr.len() as i64 + *n } else { *n } as usize;
+                match arr.get(idx) {
+                    Some(k) => Ok(*k),
+                    None => Err(RuntimeError::IndexOutOfBounds {
+                        index: *n,
+                        span: index.1,
+                    }),
+                }
+            }
+            (Value::String(s), Value::Int(n)) => {
+                let idx = if *n < 0 { s.len() as i64 + *n } else { *n } as usize;
+                match s.chars().nth(idx) {
+                    Some(k) => Ok(interpreter.memory.insert(Value::String(k.to_string()))),
+                    None => Err(RuntimeError::IndexOutOfBounds {
+                        index: *n,
+                        span: index.1,
+                    }),
+                }
+            }
+            (Value::Dict(map), Value::String(k)) => match map.get(k) {
+                Some(k) => Ok(*k),
+                None => Err(RuntimeError::NonexistentKey {
+                    key: k.clone(),
+                    span: index.1,
+                }),
+            },
+            _ => Err(RuntimeError::CannotIndex {
+                base: (base.0.to_type(), base.1),
+                index: (index.0.to_type(), index.1),
                 span,
             }),
         }

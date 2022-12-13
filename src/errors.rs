@@ -60,7 +60,7 @@ macro_rules! error_maker {
                             message: ($msg).to_string(),
                             labels: vec![
                                 $(
-                                    ($l_area.clone(), format!($fmt $(, $($e.truecolor(255, 234, 128)),*)?)),
+                                    ($l_area.clone(), format!($fmt $(, $($e.to_string().truecolor(255, 234, 128).bold()),*)?)),
                                 )*
                             ],
                         },
