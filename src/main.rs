@@ -40,6 +40,7 @@ fn main() {
                 parent: None,
             });
             ValueType::populate_scope(&mut interpreter, global_scope);
+
             match interpreter.execute_list(&e, global_scope) {
                 Ok(k) => {
                     println!("-> {}", interpreter.value_str(k))

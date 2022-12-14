@@ -6,7 +6,7 @@ use crate::{
 
 use super::{
     interpreter::Interpreter,
-    value::{Value, ValueType},
+    value::{Pattern, Value, ValueType},
 };
 
 error_maker! {
@@ -136,6 +136,40 @@ error_maker! {
         ]
         ConversionError {
             to: ValueType,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Incorrect number of arguments",
+            Labels: [
+                interpreter.make_area(*span) => r#"Expected {} arguments, found {}"#: expected, found;
+            ]
+        ]
+        ArgumentAmount {
+            expected: usize,
+            found: usize,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Argument pattern mismatch",
+            Labels: [
+                interpreter.make_area(*span) => r#"Argument "{}" defined as {}, found {}"#: name, expected.to_str(), found.name();
+            ]
+        ]
+        ArgPatternMismatch {
+            name: String,
+            expected: Pattern,
+            found: ValueType,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Return pattern mismatch",
+            Labels: [
+                interpreter.make_area(*span) => r#"Return type defined as {}, found {}"#: expected.to_str(), found.name();
+            ]
+        ]
+        RetPatternMismatch {
+            expected: Pattern,
+            found: ValueType,
             span: CodeSpan,
         }
     }

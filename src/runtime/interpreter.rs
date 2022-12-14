@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     error::RuntimeError,
-    value::{value_ops, Value},
+    value::{value_ops, Pattern, Value},
 };
 
 new_key_type! {
@@ -140,6 +140,19 @@ impl Interpreter {
                 }
                 Value::Type(t) => t.print_str(),
                 Value::Pattern(p) => p.to_str(),
+                Value::Func { args, code, .. } => {
+                    format!(
+                        "({}) => ...",
+                        args.iter()
+                            .map(|(name, typ)| if let Some(v) = typ {
+                                format!("{}: {}", interpreter.interner.resolve(name), v.to_str())
+                            } else {
+                                interpreter.interner.resolve(name).into()
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
             };
             passed.pop();
             s
@@ -429,6 +442,118 @@ impl Interpreter {
                         member: m.into(),
                         span: node.span,
                     }),
+                }
+            }
+            Expression::Func { args, code, ret } => {
+                let mut arg_exec = vec![];
+
+                let mut expr_option_pattern = |node: &Option<ExprNode>| {
+                    Ok(match node {
+                        Some(e) => {
+                            let k = self.execute_expr(e, scope)?;
+                            Some(match &self.memory[k] {
+                                Value::Type(t) => Pattern::Type(*t),
+                                Value::Pattern(p) => p.clone(),
+                                v => {
+                                    return Err(RuntimeError::MismatchedType {
+                                        found: v.to_type(),
+                                        expected: "type or pattern".into(),
+                                        span: e.span,
+                                    })
+                                }
+                            })
+                        }
+                        None => None,
+                    })
+                };
+
+                for (s, t) in args {
+                    arg_exec.push((*s, expr_option_pattern(t)?))
+                }
+                let ret = expr_option_pattern(ret)?;
+                Ok(self.memory.insert(Value::Func {
+                    args: arg_exec,
+                    code: code.clone(),
+                    parent_scope: scope,
+                    ret,
+                }))
+            }
+            Expression::Call(base, args) => {
+                let base_key = self.execute_expr(base, scope)?;
+                match self.memory[base_key].clone() {
+                    Value::Func {
+                        args: func_args,
+                        code,
+                        parent_scope,
+                        ret,
+                    } => {
+                        if args.len() != func_args.len() {
+                            return Err(RuntimeError::ArgumentAmount {
+                                expected: func_args.len(),
+                                found: args.len(),
+                                span: node.span,
+                            });
+                        }
+                        let derived = self.derive_scope(parent_scope);
+
+                        for (e, (name, typ)) in args.iter().zip(func_args) {
+                            let k = self.execute_expr(e, scope)?;
+
+                            if let Some(p) = typ {
+                                let val = &self.memory[k];
+                                if !val.matches_pat(&p, self) {
+                                    return Err(RuntimeError::ArgPatternMismatch {
+                                        name: self.interner.resolve(&name).into(),
+                                        expected: p,
+                                        found: val.to_type(),
+                                        span: e.span,
+                                    });
+                                }
+                            }
+
+                            let k = self.clone_key(k);
+                            self.scopes[derived].vars.insert(name, k);
+                        }
+
+                        let ret_key = self.execute_expr(&code, derived)?;
+                        if let Some(p) = ret {
+                            let val = &self.memory[ret_key];
+                            if !val.matches_pat(&p, self) {
+                                return Err(RuntimeError::RetPatternMismatch {
+                                    expected: p,
+                                    found: val.to_type(),
+                                    span: node.span,
+                                });
+                            }
+                        }
+                        Ok(ret_key)
+                    }
+                    Value::Type(t) => {
+                        if args.len() != 1 {
+                            return Err(RuntimeError::ArgumentAmount {
+                                expected: 1,
+                                found: args.len(),
+                                span: node.span,
+                            });
+                        }
+                        let arg_key = self.execute_expr(&args[0], scope)?;
+
+                        let result = value_ops::as_op(
+                            (arg_key, args[0].span),
+                            (base_key, base.span),
+                            node.span,
+                            self,
+                        )?;
+
+                        Ok(self.memory.insert(result))
+                    }
+                    v => {
+                        return Err(RuntimeError::MismatchedType {
+                            found: v.to_type(),
+                            expected: "func or type".into(),
+                            span: base.span,
+                        })
+                    }
                 }
             }
         }

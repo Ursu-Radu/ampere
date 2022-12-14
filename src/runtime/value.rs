@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 use lasso::Spur;
 
-use crate::sources::CodeSpan;
+use crate::{parsing::ast::ExprNode, sources::CodeSpan};
 
 use super::interpreter::{self, Interpreter, ScopeKey, ValueKey};
 
@@ -67,6 +67,12 @@ values! {
     Dict(AHashMap<String, ValueKey>): "dict",
     Type(ValueType): "type",
     Pattern(Pattern): "pattern",
+    Func {
+        args: Vec<(Spur, Option<Pattern>)>,
+        code: ExprNode,
+        parent_scope: ScopeKey,
+        ret: Option<Pattern>,
+    }: "func",
 }
 
 impl Value {
@@ -100,7 +106,7 @@ pub enum Pattern {
 impl Pattern {
     pub fn to_str(&self) -> String {
         match self {
-            Pattern::Type(t) => t.print_str(),
+            Pattern::Type(t) => t.name(),
             Pattern::Either(a, b) => format!("({} | {})", a.to_str(), b.to_str()),
             Pattern::Not(p) => format!("!{}", p.to_str()),
         }
@@ -108,6 +114,8 @@ impl Pattern {
 }
 
 pub mod value_ops {
+    use ahash::AHashMap;
+
     use crate::{
         parsing::lexer::Token,
         runtime::{
@@ -125,8 +133,10 @@ pub mod value_ops {
             (Value::Float(v1), Value::Float(v2)) => v1 == v2,
             (Value::Int(v1), Value::Float(v2)) => *v1 as f64 == *v2,
             (Value::Float(v1), Value::Int(v2)) => *v1 == *v2 as f64,
+
             (Value::String(v1), Value::String(v2)) => v1 == v2,
             (Value::Bool(v1), Value::Bool(v2)) => v1 == v2,
+
             (Value::Tuple(v1), Value::Tuple(v2)) => {
                 if v1.len() != v2.len() {
                     false
@@ -140,6 +150,45 @@ pub mod value_ops {
                     })
                 }
             }
+            (Value::Array(v1), Value::Array(v2)) => {
+                if v1.len() != v2.len() {
+                    false
+                } else {
+                    v1.iter().zip(v2).all(|(e1, e2)| {
+                        equality(
+                            &interpreter.memory[*e1],
+                            &interpreter.memory[*e2],
+                            interpreter,
+                        )
+                    })
+                }
+            }
+            (Value::Dict(v1), Value::Dict(v2)) => {
+                if v1.len() != v2.len() {
+                    false
+                } else {
+                    for (k, e1) in v1 {
+                        match v2.get(k) {
+                            Some(e2) => {
+                                if !equality(
+                                    &interpreter.memory[*e1],
+                                    &interpreter.memory[*e2],
+                                    interpreter,
+                                ) {
+                                    return false;
+                                }
+                            }
+                            None => return false,
+                        }
+                    }
+                    true
+                }
+            }
+
+            (Value::Type(v1), Value::Type(v2)) => v1 == v2,
+            (Value::Pattern(v1), Value::Pattern(v2)) => v1 == v2,
+
+            (v1 @ Value::Func { .. }, v2 @ Value::Func { .. }) => v1 == v2,
             _ => false,
         }
     }
@@ -162,7 +211,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         Ok(Value::Bool(equality(v1, v2, interpreter)))
@@ -171,7 +220,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         Ok(Value::Bool(!equality(v1, v2, interpreter)))
@@ -181,7 +230,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -192,6 +241,30 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(*v1 + *v2 as f64)),
 
             (Value::String(v1), Value::String(v2)) => Ok(Value::String(v1.clone() + v2)),
+
+            (Value::Array(v1), Value::Array(v2)) => Ok({
+                let mut elems = vec![];
+                let (v1, v2) = (v1.clone(), v2.clone());
+                for k in v1 {
+                    elems.push(interpreter.clone_key(k))
+                }
+                for k in v2 {
+                    elems.push(interpreter.clone_key(k))
+                }
+                Value::Array(elems)
+            }),
+            (Value::Dict(v1), Value::Dict(v2)) => Ok({
+                let mut map = AHashMap::new();
+                let (v1, v2) = (v1.clone(), v2.clone());
+                for (k, v) in v1 {
+                    map.insert(k, v);
+                }
+                for (k, v) in v2 {
+                    map.insert(k, v);
+                }
+                Value::Dict(map)
+            }),
+
             _ => Err(RuntimeError::InvalidOperands {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
@@ -204,7 +277,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -226,7 +299,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -236,16 +309,25 @@ pub mod value_ops {
             (Value::Int(v1), Value::Float(v2)) => Ok(Value::Float(*v1 as f64 * *v2)),
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(*v1 * *v2 as f64)),
 
-            (Value::Int(v1), Value::String(v2)) => Ok(Value::String(v2.repeat(if *v1 < 0 {
-                0
-            } else {
-                *v1 as usize
-            }))),
-            (Value::String(v1), Value::Int(v2)) => Ok(Value::String(v1.repeat(if *v2 < 0 {
-                0
-            } else {
-                *v2 as usize
-            }))),
+            (Value::Int(n), Value::String(s)) | (Value::String(s), Value::Int(n)) => {
+                Ok(Value::String(s.repeat(if *n < 0 {
+                    0
+                } else {
+                    *n as usize
+                })))
+            }
+
+            (Value::Array(arr), Value::Int(n)) | (Value::Int(n), Value::Array(arr)) => Ok({
+                let arr = arr.clone();
+                let mut elems = vec![];
+                for _ in 0..(*n.max(&0) as usize) {
+                    for k in &arr {
+                        elems.push(interpreter.clone_key(*k))
+                    }
+                }
+                Value::Array(elems)
+            }),
+
             _ => Err(RuntimeError::InvalidOperands {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
@@ -258,7 +340,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -280,7 +362,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -302,7 +384,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -327,7 +409,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -349,7 +431,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -371,7 +453,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -393,7 +475,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -491,7 +573,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -509,7 +591,7 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
@@ -542,12 +624,13 @@ pub mod value_ops {
         a: (ValueKey, CodeSpan),
         b: (ValueKey, CodeSpan),
         span: CodeSpan,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         match (v1, v2) {
             (v, Value::Type(t)) => Ok(match (v, t) {
                 (_, ValueType::String) => Value::String(interpreter.value_str(a.0)),
+                (_, ValueType::Type) => Value::Type(v.to_type()),
 
                 (Value::Int(n), ValueType::Float) => Value::Float(*n as f64),
                 (Value::Float(n), ValueType::Int) => Value::Int(n.floor() as i64),

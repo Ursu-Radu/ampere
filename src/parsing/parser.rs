@@ -114,27 +114,86 @@ impl<'a> Parser<'a> {
             Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
             Token::OpenParen => {
                 let start = self.span();
-                if self.next_is(Token::ClosedParen) {
-                    self.next();
-                    return Ok(Expression::Tuple(vec![]).into_node(start.extend(self.span())));
-                }
-                let mut inner = self.parse_expr()?;
-                if self.next_is(Token::Comma) {
-                    self.next();
-                    let mut elems = vec![inner];
+
+                let mut peek = self.lexer.clone();
+                let mut indent = 1;
+
+                let after_close = loop {
+                    match peek.next().unwrap_or(Token::Eof) {
+                        Token::OpenParen => indent += 1,
+                        Token::Eof => {
+                            return Err(SyntaxError::NoMatching {
+                                close: Token::ClosedParen,
+                                open: Token::OpenParen,
+                                area: self.make_area(start),
+                            })
+                        }
+                        Token::ClosedParen => {
+                            indent -= 1;
+                            if indent == 0 {
+                                break peek.next().unwrap_or(Token::Eof);
+                            }
+                        }
+                        _ => (),
+                    }
+                };
+
+                if after_close == Token::LargeArrow || after_close == Token::Arrow {
+                    let mut args = vec![];
+
                     while self.peek() != Token::ClosedParen {
-                        elems.push(self.parse_expr()?);
+                        self.expect_tok_named(Token::Ident, "argument name")?;
+                        let arg_name = self.slice_interned();
+
+                        let typ = if self.next_is(Token::Colon) {
+                            self.next();
+                            Some(self.parse_expr()?)
+                        } else {
+                            None
+                        };
+
+                        args.push((arg_name, typ));
                         if !self.skip_tok(Token::Comma) {
                             break;
                         }
                     }
                     self.expect_tok(Token::ClosedParen)?;
 
-                    Ok(Expression::Tuple(elems).into_node(start.extend(self.span())))
+                    let ret = if self.next_is(Token::Arrow) {
+                        self.next();
+                        Some(self.parse_expr()?)
+                    } else {
+                        None
+                    };
+
+                    self.expect_tok(Token::LargeArrow)?;
+
+                    let code = self.parse_expr()?;
+
+                    Ok(Expression::Func { args, code, ret }.into_node(start.extend(self.span())))
                 } else {
-                    self.expect_tok(Token::ClosedParen)?;
-                    inner.span = start.extend(self.span());
-                    Ok(inner)
+                    if self.next_is(Token::ClosedParen) {
+                        self.next();
+                        return Ok(Expression::Tuple(vec![]).into_node(start.extend(self.span())));
+                    }
+                    let mut inner = self.parse_expr()?;
+                    if self.next_is(Token::Comma) {
+                        self.next();
+                        let mut elems = vec![inner];
+                        while self.peek() != Token::ClosedParen {
+                            elems.push(self.parse_expr()?);
+                            if !self.skip_tok(Token::Comma) {
+                                break;
+                            }
+                        }
+                        self.expect_tok(Token::ClosedParen)?;
+
+                        Ok(Expression::Tuple(elems).into_node(start.extend(self.span())))
+                    } else {
+                        self.expect_tok(Token::ClosedParen)?;
+                        inner.span = start.extend(self.span());
+                        Ok(inner)
+                    }
                 }
             }
             Token::OpenSqBracket => {
@@ -259,6 +318,21 @@ impl<'a> Parser<'a> {
 
                     let new_span = value.span.extend(self.span());
                     value = Expression::Member(value, s).into_node(new_span);
+                }
+                Token::OpenParen => {
+                    self.next();
+
+                    let mut args = vec![];
+                    while self.peek() != Token::ClosedParen {
+                        args.push(self.parse_expr()?);
+                        if !self.skip_tok(Token::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect_tok(Token::ClosedParen)?;
+
+                    let new_span = value.span.extend(self.span());
+                    value = Expression::Call(value, args).into_node(new_span);
                 }
                 _ => break,
             }

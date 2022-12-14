@@ -17,5 +17,16 @@ error_maker! {
             expected: String,
             area: CodeArea,
         }
+        #[
+            Message: "No matching bracket found",
+            Labels: [
+                area => "No matching `{}` found for this `{}`": close.name(), open.name();
+            ]
+        ]
+        NoMatching {
+            close: Token,
+            open: Token,
+            area: CodeArea,
+        }
     }
 }
