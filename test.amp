@@ -1,6 +1,4 @@
 
-if true {
-    print (type);
-}
+print "1223a3" as int;
 
 

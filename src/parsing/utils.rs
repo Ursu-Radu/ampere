@@ -45,14 +45,6 @@ macro_rules! operators {
                 }
                 return None
             }
-            // pub fn unary_prec(op: Token) -> bool {
-            //     for (typ, toks) in OP_LIST.enumerate() {
-            //         if *typ == OpType::Unary && toks.contains(&op) {
-            //             return true
-            //         }
-            //     }
-            //     return false
-            // }
             pub fn prec_type(prec: usize) -> OpType {
                 OP_LIST[prec].0
             }
@@ -63,11 +55,13 @@ macro_rules! operators {
 operators! {
     Right => [Assign];
     Right => [PlusEq, MinusEq, MultEq, DivEq, PowEq, ModEq];
+    Left => [Is];
+    Left => [Pipe];
     Unary => [ExclMark];
     Left => [Eq, NotEq, Greater, GreaterEq, Lesser, LesserEq];
     Left => [Plus, Minus];
     Unary => [Minus];
     Left => [Mult, Div, Mod];
     Right => [Pow];
-    Left => [Is];
+    Left => [As];
 }

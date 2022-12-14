@@ -66,11 +66,44 @@ values! {
     Array(Vec<ValueKey>): "array",
     Dict(AHashMap<String, ValueKey>): "dict",
     Type(ValueType): "type",
+    Pattern(Pattern): "pattern",
 }
 
 impl Value {
     pub fn unit() -> Self {
         Value::Tuple(vec![])
+    }
+    pub fn matches_pat(&self, pat: &Pattern, interpreter: &Interpreter) -> bool {
+        match pat {
+            Pattern::Type(t) => self.to_type() == *t,
+            Pattern::Either(a, b) => {
+                self.matches_pat(a, interpreter) || self.matches_pat(b, interpreter)
+            }
+            Pattern::Not(p) => !self.matches_pat(p, interpreter),
+        }
+    }
+}
+
+impl ValueType {
+    pub fn print_str(&self) -> String {
+        format!("<type: {}>", self.name())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Type(ValueType),
+    Either(Box<Pattern>, Box<Pattern>),
+    Not(Box<Pattern>),
+}
+
+impl Pattern {
+    pub fn to_str(&self) -> String {
+        match self {
+            Pattern::Type(t) => t.print_str(),
+            Pattern::Either(a, b) => format!("({} | {})", a.to_str(), b.to_str()),
+            Pattern::Not(p) => format!("!{}", p.to_str()),
+        }
     }
 }
 
@@ -84,7 +117,7 @@ pub mod value_ops {
         sources::CodeSpan,
     };
 
-    use super::Value;
+    use super::{Pattern, Value, ValueType};
 
     pub fn equality(a: &Value, b: &Value, interpreter: &Interpreter) -> bool {
         match (a, b) {
@@ -126,29 +159,32 @@ pub mod value_ops {
     }
 
     pub fn eq_op(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        Ok(Value::Bool(equality(a.0, b.0, interpreter)))
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        Ok(Value::Bool(equality(v1, v2, interpreter)))
     }
     pub fn not_eq_op(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        Ok(Value::Bool(!equality(a.0, b.0, interpreter)))
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        Ok(Value::Bool(!equality(v1, v2, interpreter)))
     }
 
     pub fn plus(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(*v1 + *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(*v1 + *v2)),
 
@@ -157,20 +193,21 @@ pub mod value_ops {
 
             (Value::String(v1), Value::String(v2)) => Ok(Value::String(v1.clone() + v2)),
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Plus,
                 span,
             }),
         }
     }
     pub fn minus(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(*v1 - *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(*v1 - *v2)),
 
@@ -178,20 +215,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(*v1 - *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Minus,
                 span,
             }),
         }
     }
     pub fn mult(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(*v1 * *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(*v1 * *v2)),
 
@@ -209,20 +247,21 @@ pub mod value_ops {
                 *v2 as usize
             }))),
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Mult,
                 span,
             }),
         }
     }
     pub fn div(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(*v1 / *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(*v1 / *v2)),
 
@@ -230,20 +269,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(*v1 / *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Div,
                 span,
             }),
         }
     }
     pub fn modulo(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(v1.rem_euclid(*v2))),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1.rem_euclid(*v2))),
 
@@ -251,20 +291,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1.rem_euclid(*v2 as f64))),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Mod,
                 span,
             }),
         }
     }
     pub fn pow(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => {
                 Ok(Value::Int((*v1 as f64).powf(*v2 as f64).floor() as i64))
             }
@@ -274,8 +315,8 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1.powf(*v2 as f64))),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Pow,
                 span,
             }),
@@ -283,12 +324,13 @@ pub mod value_ops {
     }
 
     pub fn greater(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 > *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Bool(*v1 > *v2)),
 
@@ -296,20 +338,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 > *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Greater,
                 span,
             }),
         }
     }
     pub fn greater_eq(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 >= *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Bool(*v1 >= *v2)),
 
@@ -317,20 +360,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 >= *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Greater,
                 span,
             }),
         }
     }
     pub fn lesser(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 < *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Bool(*v1 < *v2)),
 
@@ -338,20 +382,21 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 < *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Greater,
                 span,
             }),
         }
     }
     pub fn lesser_eq(
-        a: (&Value, CodeSpan),
-        b: (&Value, CodeSpan),
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
-        match (a.0, b.0) {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
             (Value::Int(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 <= *v2)),
             (Value::Float(v1), Value::Float(v2)) => Ok(Value::Bool(*v1 <= *v2)),
 
@@ -359,8 +404,8 @@ pub mod value_ops {
             (Value::Float(v1), Value::Int(v2)) => Ok(Value::Bool(*v1 <= *v2 as f64)),
 
             _ => Err(RuntimeError::InvalidOperands {
-                left: (a.0.to_type(), a.1),
-                right: (b.0.to_type(), b.1),
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
                 op: Token::Greater,
                 span,
             }),
@@ -389,6 +434,8 @@ pub mod value_ops {
     ) -> Result<Value, RuntimeError> {
         match a.0 {
             Value::Bool(v1) => Ok(Value::Bool(!*v1)),
+            Value::Type(v1) => Ok(Value::Pattern(Pattern::Not(Box::new(Pattern::Type(*v1))))),
+            Value::Pattern(v1) => Ok(Value::Pattern(Pattern::Not(Box::new(v1.clone())))),
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::ExclMark,
@@ -398,12 +445,13 @@ pub mod value_ops {
     }
 
     pub fn index(
-        base: (&Value, CodeSpan),
-        index: (&Value, CodeSpan),
+        base: (ValueKey, CodeSpan),
+        index: (ValueKey, CodeSpan),
         span: CodeSpan,
         interpreter: &mut Interpreter,
     ) -> Result<ValueKey, RuntimeError> {
-        match (base.0, index.0) {
+        let (v1, v2) = (&interpreter.memory[base.0], &interpreter.memory[index.0]);
+        match (v1, v2) {
             (Value::Array(arr), Value::Int(n)) => {
                 let idx = if *n < 0 { arr.len() as i64 + *n } else { *n } as usize;
                 match arr.get(idx) {
@@ -432,9 +480,111 @@ pub mod value_ops {
                 }),
             },
             _ => Err(RuntimeError::CannotIndex {
-                base: (base.0.to_type(), base.1),
-                index: (index.0.to_type(), index.1),
+                base: (v1.to_type(), base.1),
+                index: (v2.to_type(), index.1),
                 span,
+            }),
+        }
+    }
+
+    pub fn is_op(
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
+        span: CodeSpan,
+        interpreter: &Interpreter,
+    ) -> Result<Value, RuntimeError> {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
+            (_, Value::Type(t)) => Ok(Value::Bool(v1.to_type() == *t)),
+            (_, Value::Pattern(p)) => Ok(Value::Bool(v1.matches_pat(p, interpreter))),
+
+            _ => Err(RuntimeError::MismatchedType {
+                found: v2.to_type(),
+                expected: "type or pattern".into(),
+                span: b.1,
+            }),
+        }
+    }
+    pub fn pipe(
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
+        span: CodeSpan,
+        interpreter: &Interpreter,
+    ) -> Result<Value, RuntimeError> {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
+            (Value::Type(a), Value::Type(b)) => Ok(Value::Pattern(Pattern::Either(
+                Box::new(Pattern::Type(*a)),
+                Box::new(Pattern::Type(*b)),
+            ))),
+            (Value::Type(a), Value::Pattern(b)) => Ok(Value::Pattern(Pattern::Either(
+                Box::new(Pattern::Type(*a)),
+                Box::new(b.clone()),
+            ))),
+            (Value::Pattern(a), Value::Type(b)) => Ok(Value::Pattern(Pattern::Either(
+                Box::new(a.clone()),
+                Box::new(Pattern::Type(*b)),
+            ))),
+            (Value::Pattern(a), Value::Pattern(b)) => Ok(Value::Pattern(Pattern::Either(
+                Box::new(a.clone()),
+                Box::new(b.clone()),
+            ))),
+
+            _ => Err(RuntimeError::InvalidOperands {
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
+                op: Token::Pipe,
+                span,
+            }),
+        }
+    }
+    pub fn as_op(
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
+        span: CodeSpan,
+        interpreter: &Interpreter,
+    ) -> Result<Value, RuntimeError> {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
+            (v, Value::Type(t)) => Ok(match (v, t) {
+                (_, ValueType::String) => Value::String(interpreter.value_str(a.0)),
+
+                (Value::Int(n), ValueType::Float) => Value::Float(*n as f64),
+                (Value::Float(n), ValueType::Int) => Value::Int(n.floor() as i64),
+
+                (Value::Bool(b), ValueType::Int) => Value::Int(if *b { 1 } else { 0 }),
+                (Value::Bool(b), ValueType::Float) => Value::Float(if *b { 1.0 } else { 0.0 }),
+
+                (Value::String(s), ValueType::Int) => Value::Int(
+                    s.parse::<i64>()
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                ),
+                (Value::String(s), ValueType::Float) => Value::Float(
+                    s.parse::<f64>()
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                ),
+                (Value::String(s), ValueType::Bool) => Value::Bool(
+                    s.parse::<bool>()
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                ),
+
+                _ => {
+                    if v.to_type() == *t {
+                        v.clone()
+                    } else {
+                        return Err(RuntimeError::CannotConvert {
+                            typ: v.to_type(),
+                            to: *t,
+                            span,
+                        });
+                    }
+                }
+            }),
+
+            _ => Err(RuntimeError::MismatchedType {
+                found: v2.to_type(),
+                expected: "type".into(),
+                span: b.1,
             }),
         }
     }

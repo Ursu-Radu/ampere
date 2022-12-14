@@ -106,5 +106,37 @@ error_maker! {
             member: String,
             span: CodeSpan,
         }
+        #[
+            Message: "Mismatched type",
+            Labels: [
+                interpreter.make_area(*span) => r#"Found {}, expected {}"#: found.name(), expected;
+            ]
+        ]
+        MismatchedType {
+            found: ValueType,
+            expected: String,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Cannot convert between types",
+            Labels: [
+                interpreter.make_area(*span) => r#"Type {} cannot be converted to {}"#: typ.name(), to.name();
+            ]
+        ]
+        CannotConvert {
+            typ: ValueType,
+            to: ValueType,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Conversion error",
+            Labels: [
+                interpreter.make_area(*span) => r#"Couldn't convert value to {}"#: to.name();
+            ]
+        ]
+        ConversionError {
+            to: ValueType,
+            span: CodeSpan,
+        }
     }
 }

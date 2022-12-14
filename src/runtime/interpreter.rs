@@ -138,7 +138,8 @@ impl Interpreter {
                         )
                     }
                 }
-                Value::Type(t) => format!("<type: {}>", t.name()),
+                Value::Type(t) => t.print_str(),
+                Value::Pattern(p) => p.to_str(),
             };
             passed.pop();
             s
@@ -161,74 +162,74 @@ impl Interpreter {
 
                 let result = match op {
                     Token::Plus => value_ops::plus(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Minus => value_ops::minus(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Mult => value_ops::mult(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Div => value_ops::div(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Mod => value_ops::modulo(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Pow => value_ops::pow(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Eq => value_ops::eq_op(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::NotEq => value_ops::not_eq_op(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Greater => value_ops::greater(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::GreaterEq => value_ops::greater_eq(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::Lesser => value_ops::lesser(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
                     Token::LesserEq => value_ops::lesser_eq(
-                        (&self.memory[left_key], left.span),
-                        (&self.memory[right_key], right.span),
+                        (left_key, left.span),
+                        (right_key, right.span),
                         node.span,
                         self,
                     ),
@@ -239,8 +240,8 @@ impl Interpreter {
                     }
                     Token::PlusEq => {
                         let v = value_ops::plus(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
@@ -249,8 +250,8 @@ impl Interpreter {
                     }
                     Token::MinusEq => {
                         let v = value_ops::minus(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
@@ -259,8 +260,8 @@ impl Interpreter {
                     }
                     Token::MultEq => {
                         let v = value_ops::mult(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
@@ -269,8 +270,8 @@ impl Interpreter {
                     }
                     Token::DivEq => {
                         let v = value_ops::div(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
@@ -279,8 +280,8 @@ impl Interpreter {
                     }
                     Token::PowEq => {
                         let v = value_ops::pow(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
@@ -289,14 +290,32 @@ impl Interpreter {
                     }
                     Token::ModEq => {
                         let v = value_ops::modulo(
-                            (&self.memory[left_key], left.span),
-                            (&self.memory[right_key], right.span),
+                            (left_key, left.span),
+                            (right_key, right.span),
                             node.span,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
                         Ok(v)
                     }
+                    Token::Is => value_ops::is_op(
+                        (left_key, left.span),
+                        (right_key, right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::As => value_ops::as_op(
+                        (left_key, left.span),
+                        (right_key, right.span),
+                        node.span,
+                        self,
+                    ),
+                    Token::Pipe => value_ops::pipe(
+                        (left_key, left.span),
+                        (right_key, right.span),
+                        node.span,
+                        self,
+                    ),
                     _ => unreachable!(),
                 }?;
 
@@ -387,8 +406,8 @@ impl Interpreter {
                 let index_key = self.execute_expr(index, scope)?;
 
                 value_ops::index(
-                    (&self.memory[base_key].clone(), base.span),
-                    (&self.memory[index_key].clone(), index.span),
+                    (base_key, base.span),
+                    (index_key, index.span),
                     node.span,
                     self,
                 )

@@ -45,6 +45,9 @@ pub enum Token {
     #[token("<=")]
     LesserEq,
 
+    #[token("|")]
+    Pipe,
+
     #[token("+=")]
     PlusEq,
     #[token("-=")]
@@ -99,6 +102,8 @@ pub enum Token {
 
     #[token("is")]
     Is,
+    #[token("as")]
+    As,
 
     #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*")]
     Ident,
@@ -136,6 +141,7 @@ impl Token {
             Token::DivEq => "/=",
             Token::ModEq => "%=",
             Token::PowEq => "^=",
+            Token::Pipe => "|",
             Token::Ident => "identifier",
             Token::Error => "unexpected character",
             Token::Eof => "end of file",
@@ -153,6 +159,7 @@ impl Token {
             Token::Dot => ".",
             Token::Print => "print",
             Token::Is => "is",
+            Token::As => "as",
             Token::Let => "let",
             Token::If => "if",
             Token::Else => "else",
