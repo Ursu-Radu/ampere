@@ -13,7 +13,7 @@ macro_rules! builtins {
         )*
     ) => {
         use crate::runtime::interpreter::{ValueKey, ScopeKey};
-        use crate::Interpreter;
+        use crate::{Interpreter, Halt};
         use crate::runtime::value::Value;
         use crate::runtime::error::RuntimeError;
         use crate::parsing::ast::ExprNode;
@@ -33,7 +33,7 @@ macro_rules! builtins {
                 span: CodeSpan,
                 scope: ScopeKey,
                 $interpreter: &mut Interpreter
-            ) -> Result<Value, RuntimeError> {
+            ) -> Result<Value, Halt> {
 
                 #[derive(Debug, Clone)]
                 struct Param<'a> {
@@ -67,7 +67,7 @@ macro_rules! builtins {
                                         expected: arg_amount,
                                         found: args.len(),
                                         span,
-                                    })
+                                    }.into_halt())
                                 }
                             }
 
@@ -144,7 +144,8 @@ macro_rules! math_helper {
                     found: v.to_type(),
                     expected: "int or float".into(),
                     span: $e.span,
-                })
+                }
+                .into_halt())
             }
         }
     };

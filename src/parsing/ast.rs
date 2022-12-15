@@ -49,6 +49,10 @@ pub enum Expression {
         ret: Option<ExprNode>,
     },
     Call(ExprNode, Vec<ExprNode>),
+
+    Return(Option<ExprNode>),
+    Break(Option<ExprNode>),
+    Continue,
 }
 impl Expression {
     pub fn into_node(self, span: CodeSpan) -> ExprNode {
@@ -69,9 +73,15 @@ pub struct StmtNode {
 pub enum Statement {
     Expr(ExprNode),
     Let(Spur, ExprNode),
+    Func {
+        name: Spur,
+        args: Vec<(Spur, Option<ExprNode>)>,
+        code: ExprNode,
+        ret: Option<ExprNode>,
+    },
 }
 impl Statement {
-    pub fn to_node(self, span: CodeSpan) -> StmtNode {
+    pub fn into_node(self, span: CodeSpan) -> StmtNode {
         StmtNode {
             span,
             stmt: Box::new(self),

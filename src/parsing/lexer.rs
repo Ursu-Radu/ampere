@@ -87,6 +87,16 @@ pub enum Token {
     #[token("while")]
     While,
 
+    #[token("func")]
+    Func,
+
+    #[token("return")]
+    Return,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
+
     #[token(";")]
     Semicolon,
     #[token(":")]
@@ -168,6 +178,10 @@ impl Token {
             Token::Else => "else",
             Token::Elif => "elif",
             Token::While => "while",
+            Token::Func => "func",
+            Token::Break => "break",
+            Token::Continue => "continue",
+            Token::Return => "return",
         }
     }
 }

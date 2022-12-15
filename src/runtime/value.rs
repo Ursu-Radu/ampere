@@ -75,7 +75,7 @@ values! {
         code: ExprNode,
         parent_scope: ScopeKey,
         ret: Option<Pattern>,
-    }: "func",
+    }: "function",
     Builtin(Builtin): "builtin",
 }
 

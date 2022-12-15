@@ -1,4 +1,30 @@
 
 
-let a = int(input());
-print(a + 5);
+let map = (arr: array, f: function) => {
+    let out = [];
+    let i = 0;
+    while i < arr.length {
+        out += [f(arr[i])];
+        i += 1;
+    };
+    out
+};
+
+let all = (arr: array, f: function) => {
+    let i = 0;
+    while i < arr.length {
+        if !f(arr[i]) {
+            return false;
+        };
+        i += 1;
+    };
+    true
+};
+
+
+println(map([1, 2, 3], (x) => x * 2));
+
+println(all([4, 6, 3, 18], (x) => x % 2 == 0));
+println(all([2, 6, 10, 18], (x) => x % 2 == 0));
+
+

@@ -39,7 +39,7 @@ macro_rules! error_maker {
             )*
         }
     ) => {
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         pub enum $enum {
             $(
                 $err_name {

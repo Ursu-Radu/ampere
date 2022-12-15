@@ -5,7 +5,7 @@ use crate::{
 };
 
 use super::{
-    interpreter::Interpreter,
+    interpreter::{Halt, Interpreter},
     value::{Pattern, Value, ValueType},
 };
 
@@ -172,5 +172,59 @@ error_maker! {
             found: ValueType,
             span: CodeSpan,
         }
+        #[
+            Message: "Return used outside of function",
+            Labels: [
+                interpreter.make_area(*span) => r#"This return was used outside of a function"#;
+            ]
+        ]
+        ReturnOutside {
+            span: CodeSpan,
+        }
+        #[
+            Message: "Break used outside of loop",
+            Labels: [
+                interpreter.make_area(*span) => r#"This break was used outside of a loop"#;
+            ]
+        ]
+        BreakOutside {
+            span: CodeSpan,
+        }
+        #[
+            Message: "Continue used outside of loop",
+            Labels: [
+                interpreter.make_area(*span) => r#"This continue was used outside of a loop"#;
+            ]
+        ]
+        ContinueOutside {
+            span: CodeSpan,
+        }
     }
 }
+
+impl RuntimeError {
+    pub fn into_halt(self) -> Halt {
+        Halt::Error(self)
+    }
+}
+
+impl From<RuntimeError> for Halt {
+    fn from(e: RuntimeError) -> Self {
+        e.into_halt()
+    }
+}
+// impl<T> From<Result<T, RuntimeError>> for Result<T, Halt> {
+//     fn from(e: Result<T, RuntimeError>) -> Self {
+//         e.map_err(|e| e.into_halt())
+//     }
+// }
+
+// pub trait HaltResult<T> {
+//     fn err_halt(self) -> Result<T, Halt>;
+// }
+
+// impl<T> HaltResult<T> for Result<T, RuntimeError> {
+//     fn err_halt(self) -> Result<T, Halt> {
+//         self.map_err(|e| e.into_halt())
+//     }
+// }

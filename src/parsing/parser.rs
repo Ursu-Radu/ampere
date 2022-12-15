@@ -17,6 +17,37 @@ pub struct Parser<'a> {
     pub interner: Rodeo,
 }
 
+macro_rules! func_parser {
+    ($parser:expr => $args:ident, $ret:ident) => {
+        let mut $args = vec![];
+
+        while $parser.peek() != Token::ClosedParen {
+            $parser.expect_tok_named(Token::Ident, "argument name")?;
+            let arg_name = $parser.slice_interned();
+
+            let typ = if $parser.next_is(Token::Colon) {
+                $parser.next();
+                Some($parser.parse_expr()?)
+            } else {
+                None
+            };
+
+            $args.push((arg_name, typ));
+            if !$parser.skip_tok(Token::Comma) {
+                break;
+            }
+        }
+        $parser.expect_tok(Token::ClosedParen)?;
+
+        let $ret = if $parser.next_is(Token::Arrow) {
+            $parser.next();
+            Some($parser.parse_expr()?)
+        } else {
+            None
+        };
+    };
+}
+
 impl<'a> Parser<'a> {
     pub fn new(code: &'a str, source: &AmpereSource, interner: Rodeo) -> Self {
         let lexer = Token::lexer(code);
@@ -32,6 +63,11 @@ impl<'a> Parser<'a> {
     }
     pub fn span(&self) -> CodeSpan {
         self.lexer.span().into()
+    }
+    pub fn peek_span(&self) -> CodeSpan {
+        let mut peek = self.lexer.clone();
+        peek.next();
+        peek.span().into()
     }
     pub fn slice(&self) -> &str {
         self.lexer.slice()
@@ -55,11 +91,6 @@ impl<'a> Parser<'a> {
             }
         }
         true
-    }
-    pub fn peek_span(&self) -> CodeSpan {
-        let mut peek = self.lexer.clone();
-        peek.next();
-        peek.span().into()
     }
 
     pub fn make_area(&self, span: CodeSpan) -> CodeArea {
@@ -92,8 +123,27 @@ impl<'a> Parser<'a> {
         self.expect_tok_named(expect, expect.name())
     }
 
+    pub fn could_be_expr(&mut self) -> bool {
+        use Token::*;
+        let unary;
+        match self.peek() {
+            Int | Float | String | True | False | Ident | OpenParen | OpenSqBracket | If
+            | While | OpenBracket | Return | Break | Continue => true,
+            unary_op
+                if {
+                    unary = unary_prec(unary_op);
+                    unary.is_some()
+                } =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn parse_unit(&mut self) -> Result<ExprNode, SyntaxError> {
         let unary;
+        let start = self.peek_span();
         match self.next() {
             Token::Int => {
                 Ok(Expression::Int(self.slice().parse::<i64>().unwrap()).into_node(self.span()))
@@ -113,8 +163,6 @@ impl<'a> Parser<'a> {
             Token::False => Ok(Expression::Bool(false).into_node(self.span())),
             Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
             Token::OpenParen => {
-                let start = self.span();
-
                 let mut peek = self.lexer.clone();
                 let mut indent = 1;
 
@@ -139,32 +187,7 @@ impl<'a> Parser<'a> {
                 };
 
                 if after_close == Token::LargeArrow || after_close == Token::Arrow {
-                    let mut args = vec![];
-
-                    while self.peek() != Token::ClosedParen {
-                        self.expect_tok_named(Token::Ident, "argument name")?;
-                        let arg_name = self.slice_interned();
-
-                        let typ = if self.next_is(Token::Colon) {
-                            self.next();
-                            Some(self.parse_expr()?)
-                        } else {
-                            None
-                        };
-
-                        args.push((arg_name, typ));
-                        if !self.skip_tok(Token::Comma) {
-                            break;
-                        }
-                    }
-                    self.expect_tok(Token::ClosedParen)?;
-
-                    let ret = if self.next_is(Token::Arrow) {
-                        self.next();
-                        Some(self.parse_expr()?)
-                    } else {
-                        None
-                    };
+                    func_parser!(self => args, ret);
 
                     self.expect_tok(Token::LargeArrow)?;
 
@@ -197,7 +220,6 @@ impl<'a> Parser<'a> {
                 }
             }
             Token::OpenSqBracket => {
-                let start = self.span();
                 let mut elems = vec![];
                 while self.peek() != Token::ClosedSqBracket {
                     elems.push(self.parse_expr()?);
@@ -210,8 +232,6 @@ impl<'a> Parser<'a> {
                 Ok(Expression::Array(elems).into_node(start.extend(self.span())))
             }
             Token::If => {
-                let start = self.span();
-
                 let mut branches = vec![];
                 let cond = self.parse_expr()?;
                 self.expect_tok(Token::OpenBracket)?;
@@ -244,7 +264,6 @@ impl<'a> Parser<'a> {
                 .into_node(start.extend(self.span())))
             }
             Token::While => {
-                let start = self.span();
                 let cond = self.parse_expr()?;
                 self.expect_tok(Token::OpenBracket)?;
                 let code = self.parse_stmts()?;
@@ -253,7 +272,6 @@ impl<'a> Parser<'a> {
                 Ok(Expression::While { code, cond }.into_node(start.extend(self.span())))
             }
             Token::OpenBracket => {
-                let start = self.span();
                 if self.next_are(&[Token::Ident, Token::Colon]) {
                     let mut map = AHashMap::new();
 
@@ -276,13 +294,29 @@ impl<'a> Parser<'a> {
                     Ok(Expression::Block(code).into_node(start.extend(self.span())))
                 }
             }
+            Token::Return => {
+                let value = if self.could_be_expr() {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                Ok(Expression::Return(value).into_node(start.extend(self.span())))
+            }
+            Token::Break => {
+                let value = if self.could_be_expr() {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                Ok(Expression::Break(value).into_node(start.extend(self.span())))
+            }
+            Token::Continue => Ok(Expression::Continue.into_node(start.extend(self.span()))),
             unary_op
                 if {
                     unary = unary_prec(unary_op);
                     unary.is_some()
                 } =>
             {
-                let start = self.span();
                 let unary_prec = unary.unwrap();
                 let next_prec = operators::next_infix(unary_prec);
                 let val = match next_prec {
@@ -378,6 +412,24 @@ impl<'a> Parser<'a> {
                 let value = self.parse_expr()?;
                 Statement::Let(s, value)
             }
+            Token::Func => {
+                self.next();
+
+                self.expect_tok_named(Token::Ident, "function name")?;
+                let s = self.slice_interned();
+                self.expect_tok(Token::OpenParen)?;
+
+                func_parser!(self => args, ret);
+
+                let code = self.parse_expr()?;
+
+                Statement::Func {
+                    name: s,
+                    args,
+                    code,
+                    ret,
+                }
+            }
             _ => {
                 let expr = self.parse_expr()?;
                 Statement::Expr(expr)
@@ -389,7 +441,7 @@ impl<'a> Parser<'a> {
         } else {
             true
         };
-        Ok((stmt.to_node(start.extend(self.span())), is_ret))
+        Ok((stmt.into_node(start.extend(self.span())), is_ret))
     }
 
     pub fn parse_stmts(&mut self) -> Result<ListNode, SyntaxError> {

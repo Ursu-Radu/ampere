@@ -10,7 +10,8 @@ use crate::{
     parsing::parser::Parser,
     runtime::{
         builtins::Builtin,
-        interpreter::{Interpreter, Scope},
+        error::RuntimeError,
+        interpreter::{Halt, Interpreter, Jump, Scope},
         value::ValueType,
     },
     sources::AmpereSource,
@@ -47,15 +48,17 @@ fn main() {
                     println!("\n-> {}", interpreter.value_str(k))
                 }
                 Err(err) => {
-                    let err = err.to_report(&interpreter);
-                    err.display()
+                    let err = match err {
+                        Halt::Error(err) => err,
+                        Halt::Jump(Jump::Return(_, span)) => RuntimeError::ReturnOutside { span },
+                        Halt::Jump(Jump::Break(_, span)) => RuntimeError::BreakOutside { span },
+                        Halt::Jump(Jump::Continue(span)) => RuntimeError::ContinueOutside { span },
+                    };
+                    err.to_report(&interpreter).display()
                 }
             }
             // println!("{:#?}", e)
         }
-        Err(err) => {
-            let err = err.to_report();
-            err.display()
-        }
+        Err(err) => err.to_report().display(),
     }
 }

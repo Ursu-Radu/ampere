@@ -33,6 +33,51 @@ pub struct Interpreter {
     pub scopes: SlotMap<ScopeKey, Scope>,
 }
 
+macro_rules! func_exec {
+    ($interpreter:expr, $args:expr, $ret:expr, $scope:expr => $arg_exec:ident, $ret_out:ident) => {
+        let mut $arg_exec = vec![];
+
+        let mut expr_option_pattern = |node: &Option<ExprNode>| {
+            Ok(match node {
+                Some(e) => {
+                    let k = $interpreter.execute_expr(e, $scope)?;
+                    Some(match &$interpreter.memory[k] {
+                        Value::Type(t) => Pattern::Type(*t),
+                        Value::Pattern(p) => p.clone(),
+                        v => {
+                            return Err(RuntimeError::MismatchedType {
+                                found: v.to_type(),
+                                expected: "type or pattern".into(),
+                                span: e.span,
+                            }
+                            .into_halt())
+                        }
+                    })
+                }
+                None => None,
+            })
+        };
+
+        for (s, t) in $args {
+            $arg_exec.push((*s, expr_option_pattern(t)?))
+        }
+        let $ret_out = expr_option_pattern($ret)?;
+    };
+}
+
+#[derive(Clone)]
+pub enum Jump {
+    Return(ValueKey, CodeSpan),
+    Break(ValueKey, CodeSpan),
+    Continue(CodeSpan),
+}
+
+#[derive(Clone)]
+pub enum Halt {
+    Error(RuntimeError),
+    Jump(Jump),
+}
+
 impl Interpreter {
     pub fn new(source: &AmpereSource, interner: Rodeo) -> Self {
         Self {
@@ -59,7 +104,7 @@ impl Interpreter {
             source: self.source.clone(),
         }
     }
-    pub fn new_unit(&mut self, span: CodeSpan) -> ValueKey {
+    pub fn new_unit(&mut self) -> ValueKey {
         self.memory.insert(Value::unit())
     }
     pub fn clone_value(&mut self, k: ValueKey) -> Value {
@@ -140,7 +185,7 @@ impl Interpreter {
                 }
                 Value::Type(t) => t.print_str(),
                 Value::Pattern(p) => p.to_str(),
-                Value::Func { args, code, .. } => {
+                Value::Func { args, .. } => {
                     format!(
                         "({}) => ...",
                         args.iter()
@@ -160,11 +205,7 @@ impl Interpreter {
         }
         inner(self, key, &mut passed)
     }
-    pub fn execute_expr(
-        &mut self,
-        node: &ExprNode,
-        scope: ScopeKey,
-    ) -> Result<ValueKey, RuntimeError> {
+    pub fn execute_expr(&mut self, node: &ExprNode, scope: ScopeKey) -> Result<ValueKey, Halt> {
         match &*node.expr {
             Expression::Int(n) => Ok(self.memory.insert(Value::Int(*n))),
             Expression::Float(f) => Ok(self.memory.insert(Value::Float(*f))),
@@ -369,7 +410,7 @@ impl Interpreter {
                     let derived = self.derive_scope(scope);
                     self.execute_list(code, derived)
                 } else {
-                    Ok(self.new_unit(node.span))
+                    Ok(self.new_unit())
                 }
             }
             Expression::Var(v) => match self.get_var(scope, *v) {
@@ -377,15 +418,25 @@ impl Interpreter {
                 None => Err(RuntimeError::NonexistentVariable {
                     name: self.interner.resolve(v).into(),
                     span: node.span,
-                }),
+                }
+                .into_halt()),
             },
             Expression::While { cond, code } => {
-                let mut ret = self.new_unit(node.span);
+                let mut ret = self.new_unit();
                 loop {
                     let k = self.execute_expr(cond, scope)?;
                     if value_ops::to_bool(&self.memory[k], cond.span, self)? {
                         let derived = self.derive_scope(scope);
-                        ret = self.execute_list(code, derived)?;
+
+                        ret = match self.execute_list(code, derived) {
+                            Ok(k) => k,
+                            h @ (Err(Halt::Error(_)) | Err(Halt::Jump(Jump::Return(_, _)))) => {
+                                return h
+                            }
+
+                            Err(Halt::Jump(Jump::Break(k, _))) => return Ok(k),
+                            Err(Halt::Jump(Jump::Continue(_))) => continue,
+                        };
                     } else {
                         return Ok(ret);
                     }
@@ -425,6 +476,7 @@ impl Interpreter {
                     node.span,
                     self,
                 )
+                .map_err(|e| e.into_halt())
             }
             Expression::Member(base, s) => {
                 let base_key = self.execute_expr(base, scope)?;
@@ -442,36 +494,12 @@ impl Interpreter {
                         base: (v.to_type(), base.span),
                         member: m.into(),
                         span: node.span,
-                    }),
+                    }
+                    .into_halt()),
                 }
             }
             Expression::Func { args, code, ret } => {
-                let mut arg_exec = vec![];
-
-                let mut expr_option_pattern = |node: &Option<ExprNode>| {
-                    Ok(match node {
-                        Some(e) => {
-                            let k = self.execute_expr(e, scope)?;
-                            Some(match &self.memory[k] {
-                                Value::Type(t) => Pattern::Type(*t),
-                                Value::Pattern(p) => p.clone(),
-                                v => {
-                                    return Err(RuntimeError::MismatchedType {
-                                        found: v.to_type(),
-                                        expected: "type or pattern".into(),
-                                        span: e.span,
-                                    })
-                                }
-                            })
-                        }
-                        None => None,
-                    })
-                };
-
-                for (s, t) in args {
-                    arg_exec.push((*s, expr_option_pattern(t)?))
-                }
-                let ret = expr_option_pattern(ret)?;
+                func_exec!(self, args, ret, scope => arg_exec, ret);
                 Ok(self.memory.insert(Value::Func {
                     args: arg_exec,
                     code: code.clone(),
@@ -493,7 +521,8 @@ impl Interpreter {
                                 expected: func_args.len(),
                                 found: args.len(),
                                 span: node.span,
-                            });
+                            }
+                            .into_halt());
                         }
                         let derived = self.derive_scope(parent_scope);
 
@@ -508,7 +537,8 @@ impl Interpreter {
                                         expected: p,
                                         found: val.to_type(),
                                         span: e.span,
-                                    });
+                                    }
+                                    .into_halt());
                                 }
                             }
 
@@ -516,7 +546,18 @@ impl Interpreter {
                             self.scopes[derived].vars.insert(name, k);
                         }
 
-                        let ret_key = self.execute_expr(&code, derived)?;
+                        let ret_key = match self.execute_expr(&code, derived) {
+                            Ok(k) => k,
+                            Err(h @ Halt::Error(_)) => return Err(h),
+
+                            Err(Halt::Jump(Jump::Return(k, _))) => k,
+                            Err(Halt::Jump(Jump::Break(_, span))) => {
+                                return Err(RuntimeError::BreakOutside { span }.into_halt())
+                            }
+                            Err(Halt::Jump(Jump::Continue(span))) => {
+                                return Err(RuntimeError::ContinueOutside { span }.into_halt())
+                            }
+                        };
                         if let Some(p) = ret {
                             let val = &self.memory[ret_key];
                             if !val.matches_pat(&p, self) {
@@ -524,7 +565,8 @@ impl Interpreter {
                                     expected: p,
                                     found: val.to_type(),
                                     span: node.span,
-                                });
+                                }
+                                .into_halt());
                             }
                         }
                         Ok(ret_key)
@@ -535,7 +577,8 @@ impl Interpreter {
                                 expected: 1,
                                 found: args.len(),
                                 span: node.span,
-                            });
+                            }
+                            .into_halt());
                         }
                         let arg_key = self.execute_expr(&args[0], scope)?;
 
@@ -552,43 +595,67 @@ impl Interpreter {
                         let result = b.run(args, node.span, scope, self)?;
                         Ok(self.memory.insert(result))
                     }
-                    v => {
-                        return Err(RuntimeError::MismatchedType {
-                            found: v.to_type(),
-                            expected: "func, builtin, or type".into(),
-                            span: base.span,
-                        })
+                    v => Err(RuntimeError::MismatchedType {
+                        found: v.to_type(),
+                        expected: "function, builtin, or type".into(),
+                        span: base.span,
                     }
+                    .into_halt()),
                 }
             }
+            Expression::Return(value) => {
+                let k = if let Some(v) = value {
+                    self.execute_expr(v, scope)?
+                } else {
+                    self.new_unit()
+                };
+                Err(Halt::Jump(Jump::Return(k, node.span)))
+            }
+            Expression::Break(value) => {
+                let k = if let Some(v) = value {
+                    self.execute_expr(v, scope)?
+                } else {
+                    self.new_unit()
+                };
+                Err(Halt::Jump(Jump::Break(k, node.span)))
+            }
+            Expression::Continue => Err(Halt::Jump(Jump::Continue(node.span))),
         }
     }
-    pub fn execute_stmt(
-        &mut self,
-        node: &StmtNode,
-        scope: ScopeKey,
-    ) -> Result<ValueKey, RuntimeError> {
+    pub fn execute_stmt(&mut self, node: &StmtNode, scope: ScopeKey) -> Result<ValueKey, Halt> {
         match &*node.stmt {
             Statement::Expr(e) => self.execute_expr(e, scope),
             Statement::Let(name, e) => {
                 let k = self.execute_expr(e, scope)?;
                 let k = self.clone_key(k);
                 self.scopes[scope].vars.insert(*name, k);
-                Ok(self.new_unit(node.span))
+                Ok(self.new_unit())
+            }
+            Statement::Func {
+                name,
+                args,
+                code,
+                ret,
+            } => {
+                func_exec!(self, args, ret, scope => arg_exec, ret);
+                let k = self.memory.insert(Value::Func {
+                    args: arg_exec,
+                    code: code.clone(),
+                    parent_scope: scope,
+                    ret,
+                });
+                self.scopes[scope].vars.insert(*name, k);
+                Ok(self.new_unit())
             }
         }
     }
-    pub fn execute_list(
-        &mut self,
-        node: &ListNode,
-        scope: ScopeKey,
-    ) -> Result<ValueKey, RuntimeError> {
+    pub fn execute_list(&mut self, node: &ListNode, scope: ScopeKey) -> Result<ValueKey, Halt> {
         match &*node.list {
             StatementList::Normal(stmts) => {
                 for stmt in stmts {
                     self.execute_stmt(stmt, scope)?;
                 }
-                Ok(self.new_unit(node.span))
+                Ok(self.new_unit())
             }
             StatementList::Ret(stmts, ret) => {
                 for stmt in stmts {
