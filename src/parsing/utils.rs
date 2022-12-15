@@ -55,6 +55,7 @@ macro_rules! operators {
 operators! {
     Right => [Assign];
     Right => [PlusEq, MinusEq, MultEq, DivEq, PowEq, ModEq];
+    Left => [DoubleDot];
     Left => [Is];
     Left => [Pipe];
     Unary => [ExclMark];

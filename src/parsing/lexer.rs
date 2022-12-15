@@ -86,6 +86,8 @@ pub enum Token {
 
     #[token("while")]
     While,
+    #[token("for")]
+    For,
 
     #[token("func")]
     Func,
@@ -106,6 +108,8 @@ pub enum Token {
 
     #[token(".")]
     Dot,
+    #[token("..")]
+    DoubleDot,
 
     #[token("=>")]
     LargeArrow,
@@ -116,6 +120,8 @@ pub enum Token {
     Is,
     #[token("as")]
     As,
+    #[token("in")]
+    In,
 
     #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*")]
     Ident,
@@ -169,15 +175,18 @@ impl Token {
             Token::Colon => ":",
             Token::Comma => ",",
             Token::Dot => ".",
+            Token::DoubleDot => "..",
             Token::LargeArrow => "=>",
             Token::Arrow => "->",
             Token::Is => "is",
             Token::As => "as",
+            Token::In => "in",
             Token::Let => "let",
             Token::If => "if",
             Token::Else => "else",
             Token::Elif => "elif",
             Token::While => "while",
+            Token::For => "for",
             Token::Func => "func",
             Token::Break => "break",
             Token::Continue => "continue",

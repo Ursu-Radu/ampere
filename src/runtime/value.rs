@@ -1,3 +1,5 @@
+use std::{ops::Range, vec::IntoIter};
+
 use ahash::AHashMap;
 use lasso::Spur;
 
@@ -77,6 +79,11 @@ values! {
         ret: Option<Pattern>,
     }: "function",
     Builtin(Builtin): "builtin",
+    Range {
+        start: i64,
+        end: i64,
+        step: i64,
+    }: "range",
 }
 
 impl Value {
@@ -117,6 +124,34 @@ impl Pattern {
     }
 }
 
+pub enum ValueIterator {
+    List(Vec<Value>, usize),
+    Range { i: i64, end: i64, step: i64 },
+}
+
+impl Iterator for ValueIterator {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            ValueIterator::List(v, i) => {
+                let out = v.get(*i).cloned();
+                *i += 1;
+                out
+            }
+            ValueIterator::Range { i, end, step } => {
+                if i < end {
+                    let out = Some(Value::Int(*i));
+                    *i += *step;
+                    out
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 pub mod value_ops {
     use ahash::AHashMap;
 
@@ -129,7 +164,7 @@ pub mod value_ops {
         sources::CodeSpan,
     };
 
-    use super::{Pattern, Value, ValueType};
+    use super::{Pattern, Value, ValueIterator, ValueType};
 
     pub fn equality(a: &Value, b: &Value, interpreter: &Interpreter) -> bool {
         match (a, b) {
@@ -208,6 +243,35 @@ pub mod value_ops {
         match v {
             Value::Bool(b) => Ok(*b),
             _ => Err(RuntimeError::BooleanConversion {
+                value: v.to_type(),
+                span,
+            }),
+        }
+    }
+    pub fn to_iter(
+        v: &Value,
+        span: CodeSpan,
+        interpreter: &Interpreter,
+    ) -> Result<ValueIterator, RuntimeError> {
+        match v {
+            Value::Array(v) | Value::Tuple(v) => Ok(ValueIterator::List(
+                v.iter().map(|k| interpreter.memory[*k].clone()).collect(),
+                0,
+            )),
+            Value::Dict(map) => Ok(ValueIterator::List(
+                map.keys().map(|k| Value::String(k.clone())).collect(),
+                0,
+            )),
+            Value::String(s) => Ok(ValueIterator::List(
+                s.chars().map(|c| Value::String(c.into())).collect(),
+                0,
+            )),
+            Value::Range { start, end, step } => Ok(ValueIterator::Range {
+                i: *start,
+                end: *end,
+                step: *step,
+            }),
+            _ => Err(RuntimeError::CannotIterate {
                 value: v.to_type(),
                 span,
             }),
@@ -675,6 +739,39 @@ pub mod value_ops {
                 found: v2.to_type(),
                 expected: "type".into(),
                 span: b.1,
+            }),
+        }
+    }
+    pub fn range_op(
+        a: (ValueKey, CodeSpan),
+        b: (ValueKey, CodeSpan),
+        span: CodeSpan,
+        interpreter: &mut Interpreter,
+    ) -> Result<Value, RuntimeError> {
+        let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
+        match (v1, v2) {
+            (Value::Int(v1), Value::Int(v2)) => Ok(Value::Range {
+                start: *v1,
+                end: *v2,
+                step: 1,
+            }),
+            (Value::Range { start, end, step }, Value::Int(v2)) => {
+                if *step == 1 {
+                    Ok(Value::Range {
+                        start: *start,
+                        end: *v2,
+                        step: *end,
+                    })
+                } else {
+                    Err(RuntimeError::RangeStepSize { span })
+                }
+            }
+
+            _ => Err(RuntimeError::InvalidOperands {
+                left: (v1.to_type(), a.1),
+                right: (v2.to_type(), b.1),
+                op: Token::DoubleDot,
+                span,
             }),
         }
     }

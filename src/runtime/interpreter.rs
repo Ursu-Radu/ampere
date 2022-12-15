@@ -199,6 +199,13 @@ impl Interpreter {
                     )
                 }
                 Value::Builtin(b) => b.print_str(),
+                Value::Range { start, end, step } => {
+                    if *step == 1 {
+                        format!("{}..{}", start, end)
+                    } else {
+                        format!("{}..{}..{}", start, step, end)
+                    }
+                }
             };
             passed.pop();
             s
@@ -371,6 +378,12 @@ impl Interpreter {
                         node.span,
                         self,
                     ),
+                    Token::DoubleDot => value_ops::range_op(
+                        (left_key, left.span),
+                        (right_key, right.span),
+                        node.span,
+                        self,
+                    ),
                     _ => unreachable!(),
                 }?;
 
@@ -441,6 +454,30 @@ impl Interpreter {
                         return Ok(ret);
                     }
                 }
+            }
+            Expression::For {
+                iterator,
+                expr,
+                code,
+            } => {
+                let k = self.execute_expr(expr, scope)?;
+                let mut ret = self.new_unit();
+                for v in value_ops::to_iter(&self.memory[k], expr.span, self)? {
+                    let derived = self.derive_scope(scope);
+                    let k = self.memory.insert(v);
+                    self.scopes[scope].vars.insert(*iterator, k);
+
+                    ret = match self.execute_list(code, derived) {
+                        Ok(k) => k,
+                        h @ (Err(Halt::Error(_)) | Err(Halt::Jump(Jump::Return(_, _)))) => {
+                            return h
+                        }
+
+                        Err(Halt::Jump(Jump::Break(k, _))) => return Ok(k),
+                        Err(Halt::Jump(Jump::Continue(_))) => continue,
+                    };
+                }
+                Ok(ret)
             }
             Expression::Array(elems) => {
                 let mut arr = vec![];

@@ -271,6 +271,23 @@ impl<'a> Parser<'a> {
 
                 Ok(Expression::While { code, cond }.into_node(start.extend(self.span())))
             }
+            Token::For => {
+                self.expect_tok_named(Token::Ident, "iterator name")?;
+                let iterator = self.slice_interned();
+                self.expect_tok(Token::In)?;
+                let expr = self.parse_expr()?;
+
+                self.expect_tok(Token::OpenBracket)?;
+                let code = self.parse_stmts()?;
+                self.expect_tok(Token::ClosedBracket)?;
+
+                Ok(Expression::For {
+                    iterator,
+                    code,
+                    expr,
+                }
+                .into_node(start.extend(self.span())))
+            }
             Token::OpenBracket => {
                 if self.next_are(&[Token::Ident, Token::Colon]) {
                     let mut map = AHashMap::new();

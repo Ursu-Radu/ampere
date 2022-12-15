@@ -199,6 +199,25 @@ error_maker! {
         ContinueOutside {
             span: CodeSpan,
         }
+        #[
+            Message: "Cannot iterate",
+            Labels: [
+                interpreter.make_area(*span) => "Cannot iterate over a {}": value.name();
+            ]
+        ]
+        CannotIterate {
+            value: ValueType,
+            span: CodeSpan,
+        }
+        #[
+            Message: "Range already has a step size different from 1",
+            Labels: [
+                interpreter.make_area(*span) => "This range already has a step size different from 1";
+            ]
+        ]
+        RangeStepSize {
+            span: CodeSpan,
+        }
     }
 }
 

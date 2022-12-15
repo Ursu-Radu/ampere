@@ -39,6 +39,11 @@ pub enum Expression {
         cond: ExprNode,
         code: ListNode,
     },
+    For {
+        iterator: Spur,
+        expr: ExprNode,
+        code: ListNode,
+    },
 
     Index(ExprNode, ExprNode),
     Member(ExprNode, Spur),
