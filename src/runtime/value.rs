@@ -82,7 +82,7 @@ values! {
     Range {
         start: i64,
         end: i64,
-        step: i64,
+        step: usize,
     }: "range",
 }
 
@@ -126,7 +126,7 @@ impl Pattern {
 
 pub enum ValueIterator {
     List(Vec<Value>, usize),
-    Range { i: i64, end: i64, step: i64 },
+    Range { i: i64, end: i64, step: usize },
 }
 
 impl Iterator for ValueIterator {
@@ -142,7 +142,7 @@ impl Iterator for ValueIterator {
             ValueIterator::Range { i, end, step } => {
                 if i < end {
                     let out = Some(Value::Int(*i));
-                    *i += *step;
+                    *i += *step as i64;
                     out
                 } else {
                     None
@@ -161,7 +161,7 @@ pub mod value_ops {
             error::RuntimeError,
             interpreter::{Interpreter, ValueKey},
         },
-        sources::CodeSpan,
+        sources::{CodeArea, CodeSpan},
     };
 
     use super::{Pattern, Value, ValueIterator, ValueType};
@@ -237,20 +237,20 @@ pub mod value_ops {
 
     pub fn to_bool(
         v: &Value,
-        span: CodeSpan,
+        area: CodeArea,
         interpreter: &Interpreter,
     ) -> Result<bool, RuntimeError> {
         match v {
             Value::Bool(b) => Ok(*b),
             _ => Err(RuntimeError::BooleanConversion {
                 value: v.to_type(),
-                span,
+                area,
             }),
         }
     }
     pub fn to_iter(
         v: &Value,
-        span: CodeSpan,
+        area: CodeArea,
         interpreter: &Interpreter,
     ) -> Result<ValueIterator, RuntimeError> {
         match v {
@@ -273,24 +273,24 @@ pub mod value_ops {
             }),
             _ => Err(RuntimeError::CannotIterate {
                 value: v.to_type(),
-                span,
+                area,
             }),
         }
     }
 
     pub fn eq_op(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
         Ok(Value::Bool(equality(v1, v2, interpreter)))
     }
     pub fn not_eq_op(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -298,9 +298,9 @@ pub mod value_ops {
     }
 
     pub fn plus(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -340,14 +340,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Plus,
-                span,
+                area,
             }),
         }
     }
     pub fn minus(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -362,14 +362,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Minus,
-                span,
+                area,
             }),
         }
     }
     pub fn mult(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -403,14 +403,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Mult,
-                span,
+                area,
             }),
         }
     }
     pub fn div(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -425,14 +425,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Div,
-                span,
+                area,
             }),
         }
     }
     pub fn modulo(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -447,14 +447,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Mod,
-                span,
+                area,
             }),
         }
     }
     pub fn pow(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -471,15 +471,15 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Pow,
-                span,
+                area,
             }),
         }
     }
 
     pub fn greater(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -494,14 +494,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Greater,
-                span,
+                area,
             }),
         }
     }
     pub fn greater_eq(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -516,14 +516,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Greater,
-                span,
+                area,
             }),
         }
     }
     pub fn lesser(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -538,14 +538,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Greater,
-                span,
+                area,
             }),
         }
     }
     pub fn lesser_eq(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -560,14 +560,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Greater,
-                span,
+                area,
             }),
         }
     }
 
     pub fn unary_minus(
-        a: (&Value, CodeSpan),
-        span: CodeSpan,
+        a: (&Value, CodeArea),
+        area: CodeArea,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
         match a.0 {
@@ -576,13 +576,13 @@ pub mod value_ops {
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::Minus,
-                span,
+                area,
             }),
         }
     }
     pub fn unary_not(
-        a: (&Value, CodeSpan),
-        span: CodeSpan,
+        a: (&Value, CodeArea),
+        area: CodeArea,
         interpreter: &Interpreter,
     ) -> Result<Value, RuntimeError> {
         match a.0 {
@@ -592,15 +592,15 @@ pub mod value_ops {
             _ => Err(RuntimeError::InvalidUnaryOperand {
                 v: (a.0.to_type(), a.1),
                 op: Token::ExclMark,
-                span,
+                area,
             }),
         }
     }
 
     pub fn index(
-        base: (ValueKey, CodeSpan),
-        index: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        base: (ValueKey, CodeArea),
+        index: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<ValueKey, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[base.0], &interpreter.memory[index.0]);
@@ -611,7 +611,7 @@ pub mod value_ops {
                     Some(k) => Ok(*k),
                     None => Err(RuntimeError::IndexOutOfBounds {
                         index: *n,
-                        span: index.1,
+                        area: index.1,
                     }),
                 }
             }
@@ -621,7 +621,7 @@ pub mod value_ops {
                     Some(k) => Ok(interpreter.memory.insert(Value::String(k.to_string()))),
                     None => Err(RuntimeError::IndexOutOfBounds {
                         index: *n,
-                        span: index.1,
+                        area: index.1,
                     }),
                 }
             }
@@ -629,21 +629,21 @@ pub mod value_ops {
                 Some(k) => Ok(*k),
                 None => Err(RuntimeError::NonexistentKey {
                     key: k.clone(),
-                    span: index.1,
+                    area: index.1,
                 }),
             },
             _ => Err(RuntimeError::CannotIndex {
                 base: (v1.to_type(), base.1),
                 index: (v2.to_type(), index.1),
-                span,
+                area,
             }),
         }
     }
 
     pub fn is_op(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -654,14 +654,14 @@ pub mod value_ops {
             _ => Err(RuntimeError::MismatchedType {
                 found: v2.to_type(),
                 expected: "type or pattern".into(),
-                span: b.1,
+                area: b.1,
             }),
         }
     }
     pub fn pipe(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -687,14 +687,14 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::Pipe,
-                span,
+                area,
             }),
         }
     }
     pub fn as_op(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -706,22 +706,28 @@ pub mod value_ops {
                 (Value::Int(n), ValueType::Float) => Value::Float(*n as f64),
                 (Value::Float(n), ValueType::Int) => Value::Int(n.floor() as i64),
 
-                (Value::Bool(b), ValueType::Int) => Value::Int(if *b { 1 } else { 0 }),
+                (Value::Bool(b), ValueType::Int) => Value::Int(i64::from(*b)),
                 (Value::Bool(b), ValueType::Float) => Value::Float(if *b { 1.0 } else { 0.0 }),
 
                 (Value::String(s), ValueType::Int) => Value::Int(
                     s.parse::<i64>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
                 ),
                 (Value::String(s), ValueType::Float) => Value::Float(
                     s.parse::<f64>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
                 ),
                 (Value::String(s), ValueType::Bool) => Value::Bool(
                     s.parse::<bool>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, span })?,
+                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
                 ),
 
+                (Value::Range { start, end, step }, ValueType::Array) => Value::Array(
+                    (*start..*end)
+                        .step_by(*step)
+                        .map(|i| interpreter.memory.insert(Value::Int(i)))
+                        .collect(),
+                ),
                 _ => {
                     if v.to_type() == *t {
                         v.clone()
@@ -729,7 +735,7 @@ pub mod value_ops {
                         return Err(RuntimeError::CannotConvert {
                             typ: v.to_type(),
                             to: *t,
-                            span,
+                            area,
                         });
                     }
                 }
@@ -738,14 +744,14 @@ pub mod value_ops {
             _ => Err(RuntimeError::MismatchedType {
                 found: v2.to_type(),
                 expected: "type".into(),
-                span: b.1,
+                area: b.1,
             }),
         }
     }
     pub fn range_op(
-        a: (ValueKey, CodeSpan),
-        b: (ValueKey, CodeSpan),
-        span: CodeSpan,
+        a: (ValueKey, CodeArea),
+        b: (ValueKey, CodeArea),
+        area: CodeArea,
         interpreter: &mut Interpreter,
     ) -> Result<Value, RuntimeError> {
         let (v1, v2) = (&interpreter.memory[a.0], &interpreter.memory[b.0]);
@@ -757,13 +763,17 @@ pub mod value_ops {
             }),
             (Value::Range { start, end, step }, Value::Int(v2)) => {
                 if *step == 1 {
-                    Ok(Value::Range {
-                        start: *start,
-                        end: *v2,
-                        step: *end,
-                    })
+                    if *end <= 0 {
+                        Err(RuntimeError::RangeNegativeStep { area })
+                    } else {
+                        Ok(Value::Range {
+                            start: *start,
+                            end: *v2,
+                            step: *end as usize,
+                        })
+                    }
                 } else {
-                    Err(RuntimeError::RangeStepSize { span })
+                    Err(RuntimeError::RangeStepSize { area })
                 }
             }
 
@@ -771,7 +781,7 @@ pub mod value_ops {
                 left: (v1.to_type(), a.1),
                 right: (v2.to_type(), b.1),
                 op: Token::DoubleDot,
-                span,
+                area,
             }),
         }
     }

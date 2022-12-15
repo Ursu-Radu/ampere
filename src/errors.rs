@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use ariadne::sources;
 use colored::Colorize;
 
-use crate::sources::{AmpereSource, CodeArea};
+use crate::sources::{AmpereSource, CodeArea, SourceKey, SourceMap};
 
 #[derive(Debug)]
 pub struct ErrorReport {
@@ -112,31 +112,29 @@ impl RainbowColorGenerator {
 }
 
 impl ErrorReport {
-    pub fn display(&self) {
+    pub fn display(&self, source_map: SourceMap) {
         use ariadne::{Color, ColorGenerator, Fmt, Label, Report, ReportKind, Source};
 
         let mut colors = RainbowColorGenerator::new(345.0, 0.73, 1.0);
 
-        let mut report = Report::build(ReportKind::Error, "", 0).with_message(&self.message);
+        let mut report =
+            Report::build(ReportKind::Error, SourceKey::default(), 0).with_message(&self.message);
 
-        let mut source_map = HashMap::new();
+        // let mut source_map = HashMap::new();
 
         for (area, msg) in &self.labels {
             report = report.with_label(
-                Label::new((area.source.name(), area.span.into()))
+                Label::new((area.src, area.span.into()))
                     .with_message(msg)
                     .with_color(colors.next()),
             );
-
-            let k = area.source.name();
-            if !source_map.contains_key(&k) {
-                source_map.insert(k, area.source.str());
-            }
         }
+        println!("\n");
+        std::io::stdout().flush().unwrap();
 
         report
             .finish()
-            .eprint(sources(source_map.into_iter()))
+            .eprint(sources(source_map.into_iter().map(|(k, s)| (k, s.read()))))
             .unwrap();
     }
 }

@@ -17,7 +17,7 @@ macro_rules! builtins {
         use crate::runtime::value::Value;
         use crate::runtime::error::RuntimeError;
         use crate::parsing::ast::ExprNode;
-        use crate::sources::CodeSpan;
+        use crate::sources::{CodeSpan, CodeArea};
 
         #[derive(Debug, Clone, Copy, PartialEq)]
         pub enum Builtin {
@@ -30,7 +30,7 @@ macro_rules! builtins {
             pub fn run(
                 &self,
                 args: &Vec<ExprNode>,
-                span: CodeSpan,
+                area: CodeArea,
                 scope: ScopeKey,
                 $interpreter: &mut Interpreter
             ) -> Result<Value, Halt> {
@@ -39,7 +39,7 @@ macro_rules! builtins {
                 struct Param<'a> {
                     pub value: &'a Value,
                     pub key: ValueKey,
-                    pub span: CodeSpan,
+                    pub area: CodeArea,
                 }
 
                 match self {
@@ -66,7 +66,7 @@ macro_rules! builtins {
                                     return Err(RuntimeError::ArgumentAmount {
                                         expected: arg_amount,
                                         found: args.len(),
-                                        span,
+                                        area,
                                     }.into_halt())
                                 }
                             }
@@ -83,7 +83,7 @@ macro_rules! builtins {
                                 let $arg = Param {
                                     value: &$interpreter.memory[keys[arg]],
                                     key: keys[arg],
-                                    span: args[arg].span,
+                                    area: args[arg].area,
                                 };
                                 arg += 1;
                             )*
@@ -94,7 +94,7 @@ macro_rules! builtins {
                                     let arg = Param {
                                         value: &$interpreter.memory[*k],
                                         key: *k,
-                                        span: node.span,
+                                        area: node.area,
                                     };
                                     $spread.push(arg);
                                 }
@@ -143,7 +143,7 @@ macro_rules! math_helper {
                 return Err(RuntimeError::MismatchedType {
                     found: v.to_type(),
                     expected: "int or float".into(),
-                    span: $e.span,
+                    area: $e.area,
                 }
                 .into_halt())
             }

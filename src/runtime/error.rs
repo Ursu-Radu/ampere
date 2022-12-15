@@ -18,205 +18,214 @@ error_maker! {
         #[
             Message: "Invalid operands",
             Labels: [
-                interpreter.make_area(*span) => "Cannot apply operator `{}` to {} and {}": op.name(), left.0.name(), right.0.name();
-                interpreter.make_area(left.1) => "This is of type {}": left.0.name();
-                interpreter.make_area(right.1) => "This is of type {}": right.0.name();
+                area => "Cannot apply operator `{}` to {} and {}": op.name(), left.0.name(), right.0.name();
+                left.1 => "This is of type {}": left.0.name();
+                right.1 => "This is of type {}": right.0.name();
             ]
         ]
         InvalidOperands {
-            left: (ValueType, CodeSpan),
-            right: (ValueType, CodeSpan),
+            left: (ValueType, CodeArea),
+            right: (ValueType, CodeArea),
             op: Token,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Invalid unary operand",
             Labels: [
-                interpreter.make_area(*span) => "Cannot apply unary operator `{}` to {}": op.name(), v.0.name();
-                interpreter.make_area(v.1) => "This is of type {}": v.0.name();
+                area => "Cannot apply unary operator `{}` to {}": op.name(), v.0.name();
+                v.1 => "This is of type {}": v.0.name();
             ]
         ]
         InvalidUnaryOperand {
-            v: (ValueType, CodeSpan),
+            v: (ValueType, CodeArea),
             op: Token,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Nonexistent variable",
             Labels: [
-                interpreter.make_area(*span) => "Variable {} does not exist": name;
+                area => "Variable {} does not exist": name;
             ]
         ]
         NonexistentVariable {
             name: String,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Cannot convert to boolean",
             Labels: [
-                interpreter.make_area(*span) => "Cannot convert {} to a boolean": value.name();
+                area => "Cannot convert {} to a boolean": value.name();
             ]
         ]
         BooleanConversion {
             value: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Invalid index for base",
             Labels: [
-                interpreter.make_area(*span) => "Cannot index {} with {}": base.0.name(), index.0.name();
-                interpreter.make_area(base.1) => "This is of type {}": base.0.name();
-                interpreter.make_area(index.1) => "This is of type {}": index.0.name();
+                area => "Cannot index {} with {}": base.0.name(), index.0.name();
+                base.1 => "This is of type {}": base.0.name();
+                index.1 => "This is of type {}": index.0.name();
             ]
         ]
         CannotIndex {
-            base: (ValueType, CodeSpan),
-            index: (ValueType, CodeSpan),
-            span: CodeSpan,
+            base: (ValueType, CodeArea),
+            index: (ValueType, CodeArea),
+            area: CodeArea,
         }
         #[
             Message: "Index out of bounds",
             Labels: [
-                interpreter.make_area(*span) => "Index {} is out of bounds": index;
+                area => "Index {} is out of bounds": index;
             ]
         ]
         IndexOutOfBounds {
             index: i64,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Nonexistent key",
             Labels: [
-                interpreter.make_area(*span) => r#"Key "{}" does not exist"#: key;
+                area => r#"Key "{}" does not exist"#: key;
             ]
         ]
         NonexistentKey {
             key: String,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Nonexistent member",
             Labels: [
-                interpreter.make_area(*span) => r#"Member "{}" does not exist on type {}"#: member, base.0.name();
-                interpreter.make_area(base.1) => r#"This is of type {}"#: base.0.name();
+                area => r#"Member "{}" does not exist on type {}"#: member, base.0.name();
+                base.1 => r#"This is of type {}"#: base.0.name();
             ]
         ]
         NonexistentMember {
-            base: (ValueType, CodeSpan),
+            base: (ValueType, CodeArea),
             member: String,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Mismatched type",
             Labels: [
-                interpreter.make_area(*span) => r#"Found {}, expected {}"#: found.name(), expected;
+                area => r#"Found {}, expected {}"#: found.name(), expected;
             ]
         ]
         MismatchedType {
             found: ValueType,
             expected: String,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Cannot convert between types",
             Labels: [
-                interpreter.make_area(*span) => r#"Type {} cannot be converted to {}"#: typ.name(), to.name();
+                area => r#"Type {} cannot be converted to {}"#: typ.name(), to.name();
             ]
         ]
         CannotConvert {
             typ: ValueType,
             to: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Conversion error",
             Labels: [
-                interpreter.make_area(*span) => r#"Couldn't convert value to {}"#: to.name();
+                area => r#"Couldn't convert value to {}"#: to.name();
             ]
         ]
         ConversionError {
             to: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Incorrect number of arguments",
             Labels: [
-                interpreter.make_area(*span) => r#"Expected {} arguments, found {}"#: expected, found;
+                area => r#"Expected {} arguments, found {}"#: expected, found;
             ]
         ]
         ArgumentAmount {
             expected: usize,
             found: usize,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Argument pattern mismatch",
             Labels: [
-                interpreter.make_area(*span) => r#"Argument "{}" defined as {}, found {}"#: name, expected.to_str(), found.name();
+                area => r#"Argument "{}" defined as {}, found {}"#: name, expected.to_str(), found.name();
             ]
         ]
         ArgPatternMismatch {
             name: String,
             expected: Pattern,
             found: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Return pattern mismatch",
             Labels: [
-                interpreter.make_area(*span) => r#"Return type defined as {}, found {}"#: expected.to_str(), found.name();
+                area => r#"Return type defined as {}, found {}"#: expected.to_str(), found.name();
             ]
         ]
         RetPatternMismatch {
             expected: Pattern,
             found: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Return used outside of function",
             Labels: [
-                interpreter.make_area(*span) => r#"This return was used outside of a function"#;
+                area => r#"This return was used outside of a function"#;
             ]
         ]
         ReturnOutside {
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Break used outside of loop",
             Labels: [
-                interpreter.make_area(*span) => r#"This break was used outside of a loop"#;
+                area => r#"This break was used outside of a loop"#;
             ]
         ]
         BreakOutside {
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Continue used outside of loop",
             Labels: [
-                interpreter.make_area(*span) => r#"This continue was used outside of a loop"#;
+                area => r#"This continue was used outside of a loop"#;
             ]
         ]
         ContinueOutside {
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Cannot iterate",
             Labels: [
-                interpreter.make_area(*span) => "Cannot iterate over a {}": value.name();
+                area => "Cannot iterate over a {}": value.name();
             ]
         ]
         CannotIterate {
             value: ValueType,
-            span: CodeSpan,
+            area: CodeArea,
         }
         #[
             Message: "Range already has a step size different from 1",
             Labels: [
-                interpreter.make_area(*span) => "This range already has a step size different from 1";
+                area => "This range already has a step size different from 1";
             ]
         ]
         RangeStepSize {
-            span: CodeSpan,
+            area: CodeArea,
+        }
+        #[
+            Message: "Range cannot have a step smaller or equal to 0",
+            Labels: [
+                area => "This range has a step smaller or equal to 0";
+            ]
+        ]
+        RangeNegativeStep {
+            area: CodeArea,
         }
     }
 }

@@ -14,7 +14,7 @@ use crate::{
         interpreter::{Halt, Interpreter, Jump, Scope},
         value::ValueType,
     },
-    sources::AmpereSource,
+    sources::{AmpereSource, SourceMap},
 };
 
 mod errors;
@@ -24,18 +24,21 @@ mod sources;
 
 fn main() {
     print!("\x1B[2J\x1B[1;1H");
-
     std::io::stdout().flush().unwrap();
+
     let path = PathBuf::from("test.amp");
 
-    let code = fs::read_to_string(&path).unwrap();
-    let src = AmpereSource::File(path);
+    let mut source_map = SourceMap::default();
+
+    let src = source_map.insert(AmpereSource::File(path));
+    let code = source_map[src].read();
+
     let interner = Rodeo::new();
-    let mut parser = Parser::new(&code, &src, interner);
+    let mut parser = Parser::new(&code, src, interner);
 
     match parser.parse() {
         Ok(e) => {
-            let mut interpreter = Interpreter::new(&src, parser.interner);
+            let mut interpreter = Interpreter::new(parser.interner, source_map);
             let global_scope = interpreter.scopes.insert(Scope {
                 vars: AHashMap::new(),
                 parent: None,
@@ -50,15 +53,15 @@ fn main() {
                 Err(err) => {
                     let err = match err {
                         Halt::Error(err) => err,
-                        Halt::Jump(Jump::Return(_, span)) => RuntimeError::ReturnOutside { span },
-                        Halt::Jump(Jump::Break(_, span)) => RuntimeError::BreakOutside { span },
-                        Halt::Jump(Jump::Continue(span)) => RuntimeError::ContinueOutside { span },
+                        Halt::Jump(Jump::Return(_, area)) => RuntimeError::ReturnOutside { area },
+                        Halt::Jump(Jump::Break(_, area)) => RuntimeError::BreakOutside { area },
+                        Halt::Jump(Jump::Continue(area)) => RuntimeError::ContinueOutside { area },
                     };
-                    err.to_report(&interpreter).display()
+                    err.to_report(&interpreter).display(interpreter.source_map)
                 }
             }
             // println!("{:#?}", e)
         }
-        Err(err) => err.to_report().display(),
+        Err(err) => err.to_report().display(source_map),
     }
 }

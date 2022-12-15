@@ -1,16 +1,7 @@
 
 
+let a = 1 + "gfdgd";
 
-
-let map = (arr: array, f: function) => {
-    let out = [];
-    for i in arr {
-        out += [f(i)];
-    };
-    out
-};
-
-print(map([1, 2, 3], (x) => x * 2))
 
 
 

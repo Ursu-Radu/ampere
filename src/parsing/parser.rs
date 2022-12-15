@@ -2,7 +2,7 @@ use ahash::AHashMap;
 use lasso::{Rodeo, Spur};
 use logos::{Lexer, Logos};
 
-use crate::sources::{AmpereSource, CodeArea, CodeSpan};
+use crate::sources::{AmpereSource, CodeArea, CodeSpan, SourceKey};
 
 use super::{
     ast::{ExprNode, Expression, ListNode, Statement, StatementList, StmtNode},
@@ -13,7 +13,7 @@ use super::{
 
 pub struct Parser<'a> {
     pub lexer: Lexer<'a, Token>,
-    pub source: AmpereSource,
+    pub src: SourceKey,
     pub interner: Rodeo,
 }
 
@@ -49,11 +49,11 @@ macro_rules! func_parser {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(code: &'a str, source: &AmpereSource, interner: Rodeo) -> Self {
+    pub fn new(code: &'a str, src: SourceKey, interner: Rodeo) -> Self {
         let lexer = Token::lexer(code);
         Parser {
             lexer,
-            source: source.clone(),
+            src,
             interner,
         }
     }
@@ -96,7 +96,7 @@ impl<'a> Parser<'a> {
     pub fn make_area(&self, span: CodeSpan) -> CodeArea {
         CodeArea {
             span,
-            source: self.source.clone(),
+            src: self.src,
         }
     }
     pub fn skip_tok(&mut self, skip: Token) -> bool {
@@ -145,23 +145,23 @@ impl<'a> Parser<'a> {
         let unary;
         let start = self.peek_span();
         match self.next() {
-            Token::Int => {
-                Ok(Expression::Int(self.slice().parse::<i64>().unwrap()).into_node(self.span()))
-            }
+            Token::Int => Ok(Expression::Int(self.slice().parse::<i64>().unwrap())
+                .into_node(self.span(), self.src)),
 
-            Token::Float => {
-                Ok(Expression::Float(self.slice().parse::<f64>().unwrap()).into_node(self.span()))
-            }
+            Token::Float => Ok(Expression::Float(self.slice().parse::<f64>().unwrap())
+                .into_node(self.span(), self.src)),
 
             Token::String => Ok(Expression::String({
                 let s = self.slice();
                 s[1..s.len() - 1].into()
             })
-            .into_node(self.span())),
+            .into_node(self.span(), self.src)),
 
-            Token::True => Ok(Expression::Bool(true).into_node(self.span())),
-            Token::False => Ok(Expression::Bool(false).into_node(self.span())),
-            Token::Ident => Ok(Expression::Var(self.slice_interned()).into_node(self.span())),
+            Token::True => Ok(Expression::Bool(true).into_node(self.span(), self.src)),
+            Token::False => Ok(Expression::Bool(false).into_node(self.span(), self.src)),
+            Token::Ident => {
+                Ok(Expression::Var(self.slice_interned()).into_node(self.span(), self.src))
+            }
             Token::OpenParen => {
                 let mut peek = self.lexer.clone();
                 let mut indent = 1;
@@ -193,11 +193,13 @@ impl<'a> Parser<'a> {
 
                     let code = self.parse_expr()?;
 
-                    Ok(Expression::Func { args, code, ret }.into_node(start.extend(self.span())))
+                    Ok(Expression::Func { args, code, ret }
+                        .into_node(start.extend(self.span()), self.src))
                 } else {
                     if self.next_is(Token::ClosedParen) {
                         self.next();
-                        return Ok(Expression::Tuple(vec![]).into_node(start.extend(self.span())));
+                        return Ok(Expression::Tuple(vec![])
+                            .into_node(start.extend(self.span()), self.src));
                     }
                     let mut inner = self.parse_expr()?;
                     if self.next_is(Token::Comma) {
@@ -211,10 +213,10 @@ impl<'a> Parser<'a> {
                         }
                         self.expect_tok(Token::ClosedParen)?;
 
-                        Ok(Expression::Tuple(elems).into_node(start.extend(self.span())))
+                        Ok(Expression::Tuple(elems).into_node(start.extend(self.span()), self.src))
                     } else {
                         self.expect_tok(Token::ClosedParen)?;
-                        inner.span = start.extend(self.span());
+                        inner.area.span = start.extend(self.span());
                         Ok(inner)
                     }
                 }
@@ -229,7 +231,7 @@ impl<'a> Parser<'a> {
                 }
                 self.expect_tok(Token::ClosedSqBracket)?;
 
-                Ok(Expression::Array(elems).into_node(start.extend(self.span())))
+                Ok(Expression::Array(elems).into_node(start.extend(self.span()), self.src))
             }
             Token::If => {
                 let mut branches = vec![];
@@ -261,7 +263,7 @@ impl<'a> Parser<'a> {
                     branches,
                     else_branch,
                 }
-                .into_node(start.extend(self.span())))
+                .into_node(start.extend(self.span()), self.src))
             }
             Token::While => {
                 let cond = self.parse_expr()?;
@@ -269,7 +271,7 @@ impl<'a> Parser<'a> {
                 let code = self.parse_stmts()?;
                 self.expect_tok(Token::ClosedBracket)?;
 
-                Ok(Expression::While { code, cond }.into_node(start.extend(self.span())))
+                Ok(Expression::While { code, cond }.into_node(start.extend(self.span()), self.src))
             }
             Token::For => {
                 self.expect_tok_named(Token::Ident, "iterator name")?;
@@ -286,7 +288,7 @@ impl<'a> Parser<'a> {
                     code,
                     expr,
                 }
-                .into_node(start.extend(self.span())))
+                .into_node(start.extend(self.span()), self.src))
             }
             Token::OpenBracket => {
                 if self.next_are(&[Token::Ident, Token::Colon]) {
@@ -304,11 +306,11 @@ impl<'a> Parser<'a> {
                     }
                     self.expect_tok(Token::ClosedBracket)?;
 
-                    Ok(Expression::Dict(map).into_node(start.extend(self.span())))
+                    Ok(Expression::Dict(map).into_node(start.extend(self.span()), self.src))
                 } else {
                     let code = self.parse_stmts()?;
                     self.expect_tok(Token::ClosedBracket)?;
-                    Ok(Expression::Block(code).into_node(start.extend(self.span())))
+                    Ok(Expression::Block(code).into_node(start.extend(self.span()), self.src))
                 }
             }
             Token::Return => {
@@ -317,7 +319,7 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-                Ok(Expression::Return(value).into_node(start.extend(self.span())))
+                Ok(Expression::Return(value).into_node(start.extend(self.span()), self.src))
             }
             Token::Break => {
                 let value = if self.could_be_expr() {
@@ -325,9 +327,11 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-                Ok(Expression::Break(value).into_node(start.extend(self.span())))
+                Ok(Expression::Break(value).into_node(start.extend(self.span()), self.src))
             }
-            Token::Continue => Ok(Expression::Continue.into_node(start.extend(self.span()))),
+            Token::Continue => {
+                Ok(Expression::Continue.into_node(start.extend(self.span()), self.src))
+            }
             unary_op
                 if {
                     unary = unary_prec(unary_op);
@@ -340,7 +344,7 @@ impl<'a> Parser<'a> {
                     Some(next_prec) => self.parse_op(next_prec)?,
                     None => self.parse_value()?,
                 };
-                Ok(Expression::Unary(unary_op, val).into_node(start.extend(self.span())))
+                Ok(Expression::Unary(unary_op, val).into_node(start.extend(self.span()), self.src))
             }
             other => Err(SyntaxError::UnexpectedToken {
                 found: other,
@@ -359,16 +363,16 @@ impl<'a> Parser<'a> {
                     let index = self.parse_expr()?;
                     self.expect_tok(Token::ClosedSqBracket)?;
 
-                    let new_span = value.span.extend(self.span());
-                    value = Expression::Index(value, index).into_node(new_span);
+                    let new_span = value.area.span.extend(self.span());
+                    value = Expression::Index(value, index).into_node(new_span, self.src);
                 }
                 Token::Dot => {
                     self.next();
                     self.expect_tok_named(Token::Ident, "member name")?;
                     let s = self.slice_interned();
 
-                    let new_span = value.span.extend(self.span());
-                    value = Expression::Member(value, s).into_node(new_span);
+                    let new_span = value.area.span.extend(self.span());
+                    value = Expression::Member(value, s).into_node(new_span, self.src);
                 }
                 Token::OpenParen => {
                     self.next();
@@ -382,8 +386,8 @@ impl<'a> Parser<'a> {
                     }
                     self.expect_tok(Token::ClosedParen)?;
 
-                    let new_span = value.span.extend(self.span());
-                    value = Expression::Call(value, args).into_node(new_span);
+                    let new_span = value.area.span.extend(self.span());
+                    value = Expression::Call(value, args).into_node(new_span, self.src);
                 }
                 _ => break,
             }
@@ -408,8 +412,8 @@ impl<'a> Parser<'a> {
             } else {
                 self.parse_op(prec)?
             };
-            let new_span = left.span.extend(right.span);
-            left = Expression::Op(left, op, right).into_node(new_span)
+            let new_span = left.area.span.extend(right.area.span);
+            left = Expression::Op(left, op, right).into_node(new_span, self.src)
         }
         Ok(left)
     }
@@ -458,7 +462,7 @@ impl<'a> Parser<'a> {
         } else {
             true
         };
-        Ok((stmt.into_node(start.extend(self.span())), is_ret))
+        Ok((stmt.into_node(start.extend(self.span()), self.src), is_ret))
     }
 
     pub fn parse_stmts(&mut self) -> Result<ListNode, SyntaxError> {
@@ -468,14 +472,14 @@ impl<'a> Parser<'a> {
         while ![Token::ClosedBracket, Token::Eof].contains(&self.peek()) {
             let (stmt, is_ret) = self.parse_stmt()?;
             if is_ret {
-                let span = stmt.span;
-                return Ok(StatementList::Ret(stmts, stmt).to_node(span));
+                let span = stmt.area.span;
+                return Ok(StatementList::Ret(stmts, stmt).into_node(span, self.src));
             } else {
-                span = stmt.span;
+                span = stmt.area.span;
                 stmts.push(stmt);
             }
         }
-        Ok(StatementList::Normal(stmts).to_node(span))
+        Ok(StatementList::Normal(stmts).into_node(span, self.src))
     }
 
     pub fn parse(&mut self) -> Result<ListNode, SyntaxError> {

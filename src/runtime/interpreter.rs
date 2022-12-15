@@ -7,7 +7,7 @@ use crate::{
         ast::{ExprNode, Expression, ListNode, Statement, StatementList, StmtNode},
         lexer::Token,
     },
-    sources::{AmpereSource, CodeArea, CodeSpan},
+    sources::{AmpereSource, CodeArea, CodeSpan, SourceMap},
 };
 
 use super::{
@@ -27,7 +27,7 @@ pub struct Scope {
 
 pub struct Interpreter {
     pub interner: Rodeo,
-    pub source: AmpereSource,
+    pub source_map: SourceMap,
 
     pub memory: SlotMap<ValueKey, Value>,
     pub scopes: SlotMap<ScopeKey, Scope>,
@@ -48,7 +48,7 @@ macro_rules! func_exec {
                             return Err(RuntimeError::MismatchedType {
                                 found: v.to_type(),
                                 expected: "type or pattern".into(),
-                                span: e.span,
+                                area: e.area,
                             }
                             .into_halt())
                         }
@@ -67,9 +67,9 @@ macro_rules! func_exec {
 
 #[derive(Clone)]
 pub enum Jump {
-    Return(ValueKey, CodeSpan),
-    Break(ValueKey, CodeSpan),
-    Continue(CodeSpan),
+    Return(ValueKey, CodeArea),
+    Break(ValueKey, CodeArea),
+    Continue(CodeArea),
 }
 
 #[derive(Clone)]
@@ -79,10 +79,10 @@ pub enum Halt {
 }
 
 impl Interpreter {
-    pub fn new(source: &AmpereSource, interner: Rodeo) -> Self {
+    pub fn new(interner: Rodeo, source_map: SourceMap) -> Self {
         Self {
+            source_map,
             interner,
-            source: source.clone(),
             memory: SlotMap::default(),
             scopes: SlotMap::default(),
         }
@@ -98,12 +98,12 @@ impl Interpreter {
         }
     }
 
-    pub fn make_area(&self, span: CodeSpan) -> CodeArea {
-        CodeArea {
-            span,
-            source: self.source.clone(),
-        }
-    }
+    // pub fn make_area(&self, span: CodeSpan) -> CodeArea {
+    //     CodeArea {
+    //         span,
+    //         source: self.source.clone(),
+    //     }
+    // }
     pub fn new_unit(&mut self) -> ValueKey {
         self.memory.insert(Value::unit())
     }
@@ -224,75 +224,75 @@ impl Interpreter {
 
                 let result = match op {
                     Token::Plus => value_ops::plus(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Minus => value_ops::minus(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Mult => value_ops::mult(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Div => value_ops::div(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Mod => value_ops::modulo(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Pow => value_ops::pow(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Eq => value_ops::eq_op(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::NotEq => value_ops::not_eq_op(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Greater => value_ops::greater(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::GreaterEq => value_ops::greater_eq(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Lesser => value_ops::lesser(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::LesserEq => value_ops::lesser_eq(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Assign => {
@@ -302,9 +302,9 @@ impl Interpreter {
                     }
                     Token::PlusEq => {
                         let v = value_ops::plus(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
@@ -312,9 +312,9 @@ impl Interpreter {
                     }
                     Token::MinusEq => {
                         let v = value_ops::minus(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
@@ -322,9 +322,9 @@ impl Interpreter {
                     }
                     Token::MultEq => {
                         let v = value_ops::mult(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
@@ -332,9 +332,9 @@ impl Interpreter {
                     }
                     Token::DivEq => {
                         let v = value_ops::div(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
@@ -342,9 +342,9 @@ impl Interpreter {
                     }
                     Token::PowEq => {
                         let v = value_ops::pow(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
@@ -352,36 +352,36 @@ impl Interpreter {
                     }
                     Token::ModEq => {
                         let v = value_ops::modulo(
-                            (left_key, left.span),
-                            (right_key, right.span),
-                            node.span,
+                            (left_key, left.area),
+                            (right_key, right.area),
+                            node.area,
                             self,
                         )?;
                         self.memory[left_key] = v.clone();
                         Ok(v)
                     }
                     Token::Is => value_ops::is_op(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::As => value_ops::as_op(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::Pipe => value_ops::pipe(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     Token::DoubleDot => value_ops::range_op(
-                        (left_key, left.span),
-                        (right_key, right.span),
-                        node.span,
+                        (left_key, left.area),
+                        (right_key, right.area),
+                        node.area,
                         self,
                     ),
                     _ => unreachable!(),
@@ -394,10 +394,10 @@ impl Interpreter {
 
                 let result = match op {
                     Token::Minus => {
-                        value_ops::unary_minus((&self.memory[value_key], v.span), node.span, self)
+                        value_ops::unary_minus((&self.memory[value_key], v.area), node.area, self)
                     }
                     Token::ExclMark => {
-                        value_ops::unary_not((&self.memory[value_key], v.span), node.span, self)
+                        value_ops::unary_not((&self.memory[value_key], v.area), node.area, self)
                     }
                     _ => unreachable!(),
                 }?;
@@ -414,7 +414,7 @@ impl Interpreter {
             } => {
                 for (cond, code) in branches {
                     let k = self.execute_expr(cond, scope)?;
-                    if value_ops::to_bool(&self.memory[k], cond.span, self)? {
+                    if value_ops::to_bool(&self.memory[k], cond.area, self)? {
                         let derived = self.derive_scope(scope);
                         return self.execute_list(code, derived);
                     }
@@ -430,7 +430,7 @@ impl Interpreter {
                 Some(k) => Ok(k),
                 None => Err(RuntimeError::NonexistentVariable {
                     name: self.interner.resolve(v).into(),
-                    span: node.span,
+                    area: node.area,
                 }
                 .into_halt()),
             },
@@ -438,7 +438,7 @@ impl Interpreter {
                 let mut ret = self.new_unit();
                 loop {
                     let k = self.execute_expr(cond, scope)?;
-                    if value_ops::to_bool(&self.memory[k], cond.span, self)? {
+                    if value_ops::to_bool(&self.memory[k], cond.area, self)? {
                         let derived = self.derive_scope(scope);
 
                         ret = match self.execute_list(code, derived) {
@@ -462,7 +462,7 @@ impl Interpreter {
             } => {
                 let k = self.execute_expr(expr, scope)?;
                 let mut ret = self.new_unit();
-                for v in value_ops::to_iter(&self.memory[k], expr.span, self)? {
+                for v in value_ops::to_iter(&self.memory[k], expr.area, self)? {
                     let derived = self.derive_scope(scope);
                     let k = self.memory.insert(v);
                     self.scopes[scope].vars.insert(*iterator, k);
@@ -508,9 +508,9 @@ impl Interpreter {
                 let index_key = self.execute_expr(index, scope)?;
 
                 value_ops::index(
-                    (base_key, base.span),
-                    (index_key, index.span),
-                    node.span,
+                    (base_key, base.area),
+                    (index_key, index.area),
+                    node.area,
                     self,
                 )
                 .map_err(|e| e.into_halt())
@@ -528,9 +528,9 @@ impl Interpreter {
                         Ok(self.memory.insert(Value::Int(map.len() as i64)))
                     }
                     (v, m) => Err(RuntimeError::NonexistentMember {
-                        base: (v.to_type(), base.span),
+                        base: (v.to_type(), base.area),
                         member: m.into(),
-                        span: node.span,
+                        area: node.area,
                     }
                     .into_halt()),
                 }
@@ -557,7 +557,7 @@ impl Interpreter {
                             return Err(RuntimeError::ArgumentAmount {
                                 expected: func_args.len(),
                                 found: args.len(),
-                                span: node.span,
+                                area: node.area,
                             }
                             .into_halt());
                         }
@@ -573,7 +573,7 @@ impl Interpreter {
                                         name: self.interner.resolve(&name).into(),
                                         expected: p,
                                         found: val.to_type(),
-                                        span: e.span,
+                                        area: e.area,
                                     }
                                     .into_halt());
                                 }
@@ -588,11 +588,11 @@ impl Interpreter {
                             Err(h @ Halt::Error(_)) => return Err(h),
 
                             Err(Halt::Jump(Jump::Return(k, _))) => k,
-                            Err(Halt::Jump(Jump::Break(_, span))) => {
-                                return Err(RuntimeError::BreakOutside { span }.into_halt())
+                            Err(Halt::Jump(Jump::Break(_, area))) => {
+                                return Err(RuntimeError::BreakOutside { area }.into_halt())
                             }
-                            Err(Halt::Jump(Jump::Continue(span))) => {
-                                return Err(RuntimeError::ContinueOutside { span }.into_halt())
+                            Err(Halt::Jump(Jump::Continue(area))) => {
+                                return Err(RuntimeError::ContinueOutside { area }.into_halt())
                             }
                         };
                         if let Some(p) = ret {
@@ -601,7 +601,7 @@ impl Interpreter {
                                 return Err(RuntimeError::RetPatternMismatch {
                                     expected: p,
                                     found: val.to_type(),
-                                    span: node.span,
+                                    area: node.area,
                                 }
                                 .into_halt());
                             }
@@ -613,29 +613,29 @@ impl Interpreter {
                             return Err(RuntimeError::ArgumentAmount {
                                 expected: 1,
                                 found: args.len(),
-                                span: node.span,
+                                area: node.area,
                             }
                             .into_halt());
                         }
                         let arg_key = self.execute_expr(&args[0], scope)?;
 
                         let result = value_ops::as_op(
-                            (arg_key, args[0].span),
-                            (base_key, base.span),
-                            node.span,
+                            (arg_key, args[0].area),
+                            (base_key, base.area),
+                            node.area,
                             self,
                         )?;
 
                         Ok(self.memory.insert(result))
                     }
                     Value::Builtin(b) => {
-                        let result = b.run(args, node.span, scope, self)?;
+                        let result = b.run(args, node.area, scope, self)?;
                         Ok(self.memory.insert(result))
                     }
                     v => Err(RuntimeError::MismatchedType {
                         found: v.to_type(),
                         expected: "function, builtin, or type".into(),
-                        span: base.span,
+                        area: base.area,
                     }
                     .into_halt()),
                 }
@@ -646,7 +646,7 @@ impl Interpreter {
                 } else {
                     self.new_unit()
                 };
-                Err(Halt::Jump(Jump::Return(k, node.span)))
+                Err(Halt::Jump(Jump::Return(k, node.area)))
             }
             Expression::Break(value) => {
                 let k = if let Some(v) = value {
@@ -654,9 +654,9 @@ impl Interpreter {
                 } else {
                     self.new_unit()
                 };
-                Err(Halt::Jump(Jump::Break(k, node.span)))
+                Err(Halt::Jump(Jump::Break(k, node.area)))
             }
-            Expression::Continue => Err(Halt::Jump(Jump::Continue(node.span))),
+            Expression::Continue => Err(Halt::Jump(Jump::Continue(node.area))),
         }
     }
     pub fn execute_stmt(&mut self, node: &StmtNode, scope: ScopeKey) -> Result<ValueKey, Halt> {

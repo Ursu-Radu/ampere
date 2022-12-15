@@ -1,4 +1,6 @@
-use std::{collections::HashMap, fs, ops::Range, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, fs, ops::Range, path::PathBuf};
+
+use slotmap::{new_key_type, SlotMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodeSpan {
@@ -31,7 +33,7 @@ pub enum AmpereSource {
 }
 
 impl AmpereSource {
-    pub fn str(&self) -> String {
+    pub fn read(&self) -> String {
         match self {
             AmpereSource::File(p) => fs::read_to_string(p).unwrap(),
         }
@@ -43,10 +45,22 @@ impl AmpereSource {
     }
 }
 
-#[derive(Debug, Clone)]
+new_key_type! {
+    pub struct SourceKey;
+}
+
+impl Display for SourceKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+pub type SourceMap = SlotMap<SourceKey, AmpereSource>;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CodeArea {
     pub span: CodeSpan,
-    pub source: AmpereSource,
+    pub src: SourceKey,
 }
 
 #[derive(Clone)]

@@ -1,13 +1,13 @@
 use ahash::AHashMap;
 use lasso::Spur;
 
-use crate::sources::CodeSpan;
+use crate::sources::{CodeArea, CodeSpan, SourceKey};
 
 use super::lexer::Token;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprNode {
-    pub span: CodeSpan,
+    pub area: CodeArea,
     pub expr: Box<Expression>,
 }
 
@@ -60,9 +60,9 @@ pub enum Expression {
     Continue,
 }
 impl Expression {
-    pub fn into_node(self, span: CodeSpan) -> ExprNode {
+    pub fn into_node(self, span: CodeSpan, src: SourceKey) -> ExprNode {
         ExprNode {
-            span,
+            area: CodeArea { span, src },
             expr: Box::new(self),
         }
     }
@@ -70,7 +70,7 @@ impl Expression {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StmtNode {
-    pub span: CodeSpan,
+    pub area: CodeArea,
     pub stmt: Box<Statement>,
 }
 
@@ -86,9 +86,9 @@ pub enum Statement {
     },
 }
 impl Statement {
-    pub fn into_node(self, span: CodeSpan) -> StmtNode {
+    pub fn into_node(self, span: CodeSpan, src: SourceKey) -> StmtNode {
         StmtNode {
-            span,
+            area: CodeArea { span, src },
             stmt: Box::new(self),
         }
     }
@@ -96,7 +96,7 @@ impl Statement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListNode {
-    pub span: CodeSpan,
+    pub area: CodeArea,
     pub list: Box<StatementList>,
 }
 
@@ -106,9 +106,9 @@ pub enum StatementList {
     Ret(Vec<StmtNode>, StmtNode),
 }
 impl StatementList {
-    pub fn to_node(self, span: CodeSpan) -> ListNode {
+    pub fn into_node(self, span: CodeSpan, src: SourceKey) -> ListNode {
         ListNode {
-            span,
+            area: CodeArea { span, src },
             list: Box::new(self),
         }
     }
