@@ -3,7 +3,10 @@ use lasso::Spur;
 
 use crate::{parsing::ast::ExprNode, sources::CodeSpan};
 
-use super::interpreter::{self, Interpreter, ScopeKey, ValueKey};
+use super::{
+    builtins::Builtin,
+    interpreter::{self, Interpreter, ScopeKey, ValueKey},
+};
 
 macro_rules! values {
     (
@@ -73,6 +76,7 @@ values! {
         parent_scope: ScopeKey,
         ret: Option<Pattern>,
     }: "func",
+    Builtin(Builtin): "builtin",
 }
 
 impl Value {
@@ -189,6 +193,9 @@ pub mod value_ops {
             (Value::Pattern(v1), Value::Pattern(v2)) => v1 == v2,
 
             (v1 @ Value::Func { .. }, v2 @ Value::Func { .. }) => v1 == v2,
+
+            (Value::Builtin(v1), Value::Builtin(v2)) => v1 == v2,
+
             _ => false,
         }
     }

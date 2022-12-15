@@ -153,6 +153,7 @@ impl Interpreter {
                             .join(", ")
                     )
                 }
+                Value::Builtin(b) => b.print_str(),
             };
             passed.pop();
             s
@@ -547,10 +548,14 @@ impl Interpreter {
 
                         Ok(self.memory.insert(result))
                     }
+                    Value::Builtin(b) => {
+                        let result = b.run(args, node.span, scope, self)?;
+                        Ok(self.memory.insert(result))
+                    }
                     v => {
                         return Err(RuntimeError::MismatchedType {
                             found: v.to_type(),
-                            expected: "func or type".into(),
+                            expected: "func, builtin, or type".into(),
                             span: base.span,
                         })
                     }
@@ -569,12 +574,6 @@ impl Interpreter {
                 let k = self.execute_expr(e, scope)?;
                 let k = self.clone_key(k);
                 self.scopes[scope].vars.insert(*name, k);
-                Ok(self.new_unit(node.span))
-            }
-            Statement::Print(e) => {
-                let k = self.execute_expr(e, scope)?;
-                println!("{}", self.value_str(k));
-
                 Ok(self.new_unit(node.span))
             }
         }

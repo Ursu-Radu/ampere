@@ -69,7 +69,6 @@ pub struct StmtNode {
 pub enum Statement {
     Expr(ExprNode),
     Let(Spur, ExprNode),
-    Print(ExprNode),
 }
 impl Statement {
     pub fn to_node(self, span: CodeSpan) -> StmtNode {

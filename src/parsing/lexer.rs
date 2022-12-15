@@ -102,9 +102,6 @@ pub enum Token {
     #[token("->")]
     Arrow,
 
-    #[token("print")]
-    Print,
-
     #[token("is")]
     Is,
     #[token("as")]
@@ -164,7 +161,6 @@ impl Token {
             Token::Dot => ".",
             Token::LargeArrow => "=>",
             Token::Arrow => "->",
-            Token::Print => "print",
             Token::Is => "is",
             Token::As => "as",
             Token::Let => "let",

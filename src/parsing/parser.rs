@@ -378,11 +378,6 @@ impl<'a> Parser<'a> {
                 let value = self.parse_expr()?;
                 Statement::Let(s, value)
             }
-            Token::Print => {
-                self.next();
-                let value = self.parse_expr()?;
-                Statement::Print(value)
-            }
             _ => {
                 let expr = self.parse_expr()?;
                 Statement::Expr(expr)

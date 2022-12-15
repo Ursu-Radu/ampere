@@ -1,3 +1,4 @@
 
-let a = (a) -> string => a + 1;
-print a(3);
+
+let a = int(input());
+print(a + 5);
