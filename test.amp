@@ -1,7 +1,7 @@
 
 
-let a = 1 + "gfdgd";
+let test = import "other.amp";
 
-
-
+println(test);
+println(test.sum(2, 7));
 

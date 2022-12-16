@@ -185,8 +185,7 @@ builtins! {
             .expect("Failed to read line");
         Value::String(
             input_str
-                .replace('\r', "")
-                .replace('\n', "")
+                .replace(['\r', '\n'], "")
         )
     }
 

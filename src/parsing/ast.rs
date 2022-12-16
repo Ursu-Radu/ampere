@@ -58,6 +58,8 @@ pub enum Expression {
     Return(Option<ExprNode>),
     Break(Option<ExprNode>),
     Continue,
+
+    Import(ExprNode),
 }
 impl Expression {
     pub fn into_node(self, span: CodeSpan, src: SourceKey) -> ExprNode {
@@ -77,12 +79,13 @@ pub struct StmtNode {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Expr(ExprNode),
-    Let(Spur, ExprNode),
+    Let(Spur, ExprNode, bool),
     Func {
         name: Spur,
         args: Vec<(Spur, Option<ExprNode>)>,
         code: ExprNode,
         ret: Option<ExprNode>,
+        export: bool,
     },
 }
 impl Statement {

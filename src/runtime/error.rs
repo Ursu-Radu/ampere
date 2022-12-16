@@ -1,6 +1,6 @@
 use crate::{
     error_maker,
-    parsing::lexer::Token,
+    parsing::{error::SyntaxError, lexer::Token},
     sources::{CodeArea, CodeSpan},
 };
 
@@ -131,10 +131,11 @@ error_maker! {
         #[
             Message: "Conversion error",
             Labels: [
-                area => r#"Couldn't convert value to {}"#: to.name();
+                area => r#"Couldn't convert {} value to {}"#: from.name(), to.name();
             ]
         ]
         ConversionError {
+            from: ValueType,
             to: ValueType,
             area: CodeArea,
         }
@@ -226,6 +227,26 @@ error_maker! {
         ]
         RangeNegativeStep {
             area: CodeArea,
+        }
+        #[
+            Message: "Could not read file",
+            Labels: [
+                area => "Could not read file imported here";
+            ]
+        ]
+        ImportReadFailed {
+            area: CodeArea,
+        }
+        #[
+            Message: "Error parsing import",
+            Labels: [
+                area => "Error parsing file imported here";
+                -> error.to_report().labels
+            ]
+        ]
+        ImportParse {
+            area: CodeArea,
+            error: SyntaxError,
         }
     }
 }

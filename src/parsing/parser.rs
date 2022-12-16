@@ -14,7 +14,7 @@ use super::{
 pub struct Parser<'a> {
     pub lexer: Lexer<'a, Token>,
     pub src: SourceKey,
-    pub interner: Rodeo,
+    pub interner: &'a mut Rodeo,
 }
 
 macro_rules! func_parser {
@@ -49,7 +49,7 @@ macro_rules! func_parser {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(code: &'a str, src: SourceKey, interner: Rodeo) -> Self {
+    pub fn new(code: &'a str, src: SourceKey, interner: &'a mut Rodeo) -> Self {
         let lexer = Token::lexer(code);
         Parser {
             lexer,
@@ -128,7 +128,7 @@ impl<'a> Parser<'a> {
         let unary;
         match self.peek() {
             Int | Float | String | True | False | Ident | OpenParen | OpenSqBracket | If
-            | While | OpenBracket | Return | Break | Continue => true,
+            | While | OpenBracket | Return | Break | Continue | Import => true,
             unary_op
                 if {
                     unary = unary_prec(unary_op);
@@ -332,6 +332,10 @@ impl<'a> Parser<'a> {
             Token::Continue => {
                 Ok(Expression::Continue.into_node(start.extend(self.span()), self.src))
             }
+            Token::Import => {
+                let value = self.parse_expr()?;
+                Ok(Expression::Import(value).into_node(start.extend(self.span()), self.src))
+            }
             unary_op
                 if {
                     unary = unary_prec(unary_op);
@@ -424,6 +428,14 @@ impl<'a> Parser<'a> {
 
     pub fn parse_stmt(&mut self) -> Result<(StmtNode, bool), SyntaxError> {
         let start = self.peek_span();
+
+        let export = if self.next_is(Token::Export) {
+            self.next();
+            true
+        } else {
+            false
+        };
+
         let stmt = match self.peek() {
             Token::Let => {
                 self.next();
@@ -431,7 +443,7 @@ impl<'a> Parser<'a> {
                 let s = self.slice_interned();
                 self.expect_tok(Token::Assign)?;
                 let value = self.parse_expr()?;
-                Statement::Let(s, value)
+                Statement::Let(s, value, export)
             }
             Token::Func => {
                 self.next();
@@ -449,9 +461,18 @@ impl<'a> Parser<'a> {
                     args,
                     code,
                     ret,
+                    export,
                 }
             }
-            _ => {
+            t => {
+                if export {
+                    self.next();
+                    return Err(SyntaxError::UnexpectedToken {
+                        found: t,
+                        expected: "func or let".into(),
+                        area: self.make_area(self.span()),
+                    });
+                }
                 let expr = self.parse_expr()?;
                 Statement::Expr(expr)
             }

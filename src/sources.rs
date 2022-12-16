@@ -1,6 +1,16 @@
-use std::{collections::HashMap, fmt::Display, fs, ops::Range, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    fs,
+    ops::{Index, IndexMut, Range},
+    path::PathBuf,
+};
 
+use ahash::AHashMap;
+use lasso::Spur;
 use slotmap::{new_key_type, SlotMap};
+
+use crate::runtime::interpreter::ValueKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodeSpan {
@@ -33,9 +43,9 @@ pub enum AmpereSource {
 }
 
 impl AmpereSource {
-    pub fn read(&self) -> String {
+    pub fn read(&self) -> Option<String> {
         match self {
-            AmpereSource::File(p) => fs::read_to_string(p).unwrap(),
+            AmpereSource::File(p) => fs::read_to_string(p).ok(),
         }
     }
     pub fn name(&self) -> String {
@@ -55,9 +65,61 @@ impl Display for SourceKey {
     }
 }
 
-pub type SourceMap = SlotMap<SourceKey, AmpereSource>;
+// pub type SourceMap = SlotMap<SourceKey, AmpereSource>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SrcData {
+    pub src: AmpereSource,
+    pub exports: AHashMap<Spur, ValueKey>,
+}
+
+pub struct SourceMap {
+    pub slotmap: SlotMap<SourceKey, SrcData>,
+    pub hashmap: AHashMap<AmpereSource, SourceKey>,
+}
+
+impl SourceMap {
+    pub fn new() -> Self {
+        Self {
+            slotmap: SlotMap::default(),
+            hashmap: AHashMap::new(),
+        }
+    }
+    pub fn insert(&mut self, src: AmpereSource) -> SourceKey {
+        match self.hashmap.get(&src) {
+            Some(k) => *k,
+            None => {
+                let k = self.slotmap.insert(SrcData {
+                    src: src.clone(),
+                    exports: AHashMap::new(),
+                });
+                self.hashmap.insert(src, k);
+                k
+            }
+        }
+    }
+}
+
+impl Index<SourceKey> for SourceMap {
+    type Output = SrcData;
+
+    fn index(&self, index: SourceKey) -> &Self::Output {
+        &self.slotmap[index]
+    }
+}
+impl IndexMut<SourceKey> for SourceMap {
+    fn index_mut(&mut self, index: SourceKey) -> &mut Self::Output {
+        &mut self.slotmap[index]
+    }
+}
+// impl Index<AmpereSource> for SourceMap {
+//     type Output = AHashMap<Spur, ValueKey>;
+
+//     fn index(&self, index: AmpereSource) -> &Self::Output {
+//         &self.slotmap[self.hashmap[&index]].exports
+//     }
+// }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodeArea {
     pub span: CodeSpan,
     pub src: SourceKey,

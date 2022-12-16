@@ -29,6 +29,7 @@ macro_rules! error_maker {
                         $(
                             $l_area:expr => $fmt:literal $(: $($e:expr),+)?;
                         )+
+                        $(-> $spread:expr)?
                     ]
                 ]
                 $err_name:ident {
@@ -58,11 +59,19 @@ macro_rules! error_maker {
                         $enum::$err_name { $($field,)* } => ErrorReport {
                             title: $title.to_string(),
                             message: ($msg).to_string(),
-                            labels: vec![
+                            labels: {
+                                let mut v = vec![
+                                    $(
+                                        ($l_area.clone(), format!($fmt $(, $($e.to_string().truecolor(255, 234, 128).bold()),*)?)),
+                                    )*
+                                ];
                                 $(
-                                    ($l_area.clone(), format!($fmt $(, $($e.to_string().truecolor(255, 234, 128).bold()),*)?)),
-                                )*
-                            ],
+                                    for i in $spread {
+                                        v.push(i)
+                                    }
+                                )?
+                                v
+                            },
                         },
                     )*
                 }
@@ -117,14 +126,13 @@ impl ErrorReport {
 
         let mut colors = RainbowColorGenerator::new(345.0, 0.73, 1.0);
 
-        let mut report =
-            Report::build(ReportKind::Error, SourceKey::default(), 0).with_message(&self.message);
-
-        // let mut source_map = HashMap::new();
+        let mut report = Report::build(ReportKind::Error, "", 0).with_message(&self.message);
 
         for (area, msg) in &self.labels {
+            let src = &source_map[area.src];
+
             report = report.with_label(
-                Label::new((area.src, area.span.into()))
+                Label::new((src.src.name(), area.span.into()))
                     .with_message(msg)
                     .with_color(colors.next()),
             );
@@ -134,7 +142,9 @@ impl ErrorReport {
 
         report
             .finish()
-            .eprint(sources(source_map.into_iter().map(|(k, s)| (k, s.read()))))
+            .eprint(sources(source_map.slotmap.iter().map(|(k, s)| {
+                (source_map[k].src.name(), s.src.read().unwrap())
+            })))
             .unwrap();
     }
 }

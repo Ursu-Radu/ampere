@@ -1,18 +1,22 @@
+use std::path::PathBuf;
+
 use ahash::AHashMap;
 use lasso::{Rodeo, Spur};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{new_key_type, SecondaryMap, SlotMap};
 
 use crate::{
     parsing::{
         ast::{ExprNode, Expression, ListNode, Statement, StatementList, StmtNode},
         lexer::Token,
+        parser::Parser,
     },
-    sources::{AmpereSource, CodeArea, CodeSpan, SourceMap},
+    sources::{AmpereSource, CodeArea, CodeSpan, SourceKey, SourceMap},
 };
 
 use super::{
+    builtins::Builtin,
     error::RuntimeError,
-    value::{value_ops, Pattern, Value},
+    value::{value_ops, Pattern, Value, ValueType},
 };
 
 new_key_type! {
@@ -25,12 +29,16 @@ pub struct Scope {
     pub parent: Option<ScopeKey>,
 }
 
-pub struct Interpreter {
-    pub interner: Rodeo,
+pub struct Interpreter<'a> {
+    pub interner: &'a mut Rodeo,
     pub source_map: SourceMap,
 
     pub memory: SlotMap<ValueKey, Value>,
     pub scopes: SlotMap<ScopeKey, Scope>,
+
+    pub exports: SecondaryMap<SourceKey, AHashMap<Spur, ValueKey>>,
+
+    pub src_stack: Vec<SourceKey>,
 }
 
 macro_rules! func_exec {
@@ -78,13 +86,15 @@ pub enum Halt {
     Jump(Jump),
 }
 
-impl Interpreter {
-    pub fn new(interner: Rodeo, source_map: SourceMap) -> Self {
+impl<'a> Interpreter<'a> {
+    pub fn new(interner: &'a mut Rodeo, source_map: SourceMap) -> Self {
         Self {
             source_map,
             interner,
             memory: SlotMap::default(),
             scopes: SlotMap::default(),
+            exports: SecondaryMap::default(),
+            src_stack: vec![],
         }
     }
     pub fn get_var(&self, scope: ScopeKey, var: Spur) -> Option<ValueKey> {
@@ -129,8 +139,6 @@ impl Interpreter {
             key: ValueKey,
             passed: &mut Vec<&'a Value>,
         ) -> String {
-            // passed.push(key);
-
             let val = &interpreter.memory[key];
             let contains = if passed.is_empty() {
                 false
@@ -527,6 +535,8 @@ impl Interpreter {
                     (Value::Dict(map), "length") => {
                         Ok(self.memory.insert(Value::Int(map.len() as i64)))
                     }
+
+                    (Value::Dict(map), s) if map.contains_key(s) => Ok(map[s]),
                     (v, m) => Err(RuntimeError::NonexistentMember {
                         base: (v.to_type(), base.area),
                         member: m.into(),
@@ -657,15 +667,99 @@ impl Interpreter {
                 Err(Halt::Jump(Jump::Break(k, node.area)))
             }
             Expression::Continue => Err(Halt::Jump(Jump::Continue(node.area))),
+            Expression::Import(value) => {
+                let k = self.execute_expr(value, scope)?;
+                let path = match &self.memory[k] {
+                    Value::String(s) => s,
+                    v => {
+                        return Err(RuntimeError::MismatchedType {
+                            found: v.to_type(),
+                            expected: "string".into(),
+                            area: value.area,
+                        }
+                        .into_halt())
+                    }
+                };
+
+                let path = PathBuf::from(path);
+                let src = AmpereSource::File(path);
+
+                let (code, src) = if let Some(c) = src.read() {
+                    (c, self.source_map.insert(src))
+                } else {
+                    return Err(RuntimeError::ImportReadFailed { area: node.area }.into_halt());
+                };
+
+                let parse_result = {
+                    let mut parser = Parser::new(&code, src, self.interner);
+                    parser.parse()
+                };
+
+                match parse_result {
+                    Ok(e) => {
+                        let global_scope = self.scopes.insert(Scope {
+                            vars: AHashMap::new(),
+                            parent: None,
+                        });
+                        ValueType::populate_scope(self, global_scope);
+                        Builtin::populate_scope(self, global_scope);
+
+                        self.src_stack.push(src);
+
+                        match self.execute_list(&e, global_scope) {
+                            Ok(_) => {
+                                self.src_stack.pop();
+                            }
+                            Err(err) => {
+                                self.src_stack.pop();
+                                let err = match err {
+                                    Halt::Error(err) => err,
+                                    Halt::Jump(Jump::Return(_, area)) => {
+                                        RuntimeError::ReturnOutside { area }
+                                    }
+                                    Halt::Jump(Jump::Break(_, area)) => {
+                                        RuntimeError::BreakOutside { area }
+                                    }
+                                    Halt::Jump(Jump::Continue(area)) => {
+                                        RuntimeError::ContinueOutside { area }
+                                    }
+                                };
+                                return Err(err.into_halt());
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        return Err(RuntimeError::ImportParse {
+                            error: err,
+                            area: node.area,
+                        }
+                        .into_halt());
+                    }
+                }
+
+                let mut map = AHashMap::new();
+                for (k, v) in &self.source_map[src].exports {
+                    map.insert(self.interner.resolve(k).to_string(), *v);
+                }
+
+                Ok(self.memory.insert(Value::Dict(map)))
+            }
         }
     }
     pub fn execute_stmt(&mut self, node: &StmtNode, scope: ScopeKey) -> Result<ValueKey, Halt> {
         match &*node.stmt {
             Statement::Expr(e) => self.execute_expr(e, scope),
-            Statement::Let(name, e) => {
+            Statement::Let(name, e, export) => {
                 let k = self.execute_expr(e, scope)?;
                 let k = self.clone_key(k);
                 self.scopes[scope].vars.insert(*name, k);
+
+                if *export {
+                    self.source_map[*self.src_stack.last().unwrap()]
+                        .exports
+                        .insert(*name, k);
+                }
+
                 Ok(self.new_unit())
             }
             Statement::Func {
@@ -673,6 +767,7 @@ impl Interpreter {
                 args,
                 code,
                 ret,
+                export,
             } => {
                 func_exec!(self, args, ret, scope => arg_exec, ret);
                 let k = self.memory.insert(Value::Func {
@@ -682,6 +777,13 @@ impl Interpreter {
                     ret,
                 });
                 self.scopes[scope].vars.insert(*name, k);
+
+                if *export {
+                    self.source_map[*self.src_stack.last().unwrap()]
+                        .exports
+                        .insert(*name, k);
+                }
+
                 Ok(self.new_unit())
             }
         }

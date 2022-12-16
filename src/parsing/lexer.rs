@@ -99,6 +99,11 @@ pub enum Token {
     #[token("continue")]
     Continue,
 
+    #[token("import")]
+    Import,
+    #[token("export")]
+    Export,
+
     #[token(";")]
     Semicolon,
     #[token(":")]
@@ -191,6 +196,8 @@ impl Token {
             Token::Break => "break",
             Token::Continue => "continue",
             Token::Return => "return",
+            Token::Import => "import",
+            Token::Export => "export",
         }
     }
 }

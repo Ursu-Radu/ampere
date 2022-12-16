@@ -709,18 +709,27 @@ pub mod value_ops {
                 (Value::Bool(b), ValueType::Int) => Value::Int(i64::from(*b)),
                 (Value::Bool(b), ValueType::Float) => Value::Float(if *b { 1.0 } else { 0.0 }),
 
-                (Value::String(s), ValueType::Int) => Value::Int(
-                    s.parse::<i64>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
-                ),
-                (Value::String(s), ValueType::Float) => Value::Float(
-                    s.parse::<f64>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
-                ),
-                (Value::String(s), ValueType::Bool) => Value::Bool(
-                    s.parse::<bool>()
-                        .map_err(|_| RuntimeError::ConversionError { to: *t, area })?,
-                ),
+                (Value::String(s), ValueType::Int) => Value::Int(s.parse::<i64>().map_err(
+                    |_| RuntimeError::ConversionError {
+                        from: v.to_type(),
+                        to: *t,
+                        area,
+                    },
+                )?),
+                (Value::String(s), ValueType::Float) => Value::Float(s.parse::<f64>().map_err(
+                    |_| RuntimeError::ConversionError {
+                        from: v.to_type(),
+                        to: *t,
+                        area,
+                    },
+                )?),
+                (Value::String(s), ValueType::Bool) => Value::Bool(s.parse::<bool>().map_err(
+                    |_| RuntimeError::ConversionError {
+                        from: v.to_type(),
+                        to: *t,
+                        area,
+                    },
+                )?),
 
                 (Value::Range { start, end, step }, ValueType::Array) => Value::Array(
                     (*start..*end)

@@ -1,0 +1,9 @@
+
+
+
+export func sum(a: int | float, b: int | float) {
+    println(a + b);
+    return a * b;
+};
+
+println("hello from other.amp");

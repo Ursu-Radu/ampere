@@ -28,17 +28,17 @@ fn main() {
 
     let path = PathBuf::from("test.amp");
 
-    let mut source_map = SourceMap::default();
+    let mut source_map = SourceMap::new();
 
     let src = source_map.insert(AmpereSource::File(path));
-    let code = source_map[src].read();
+    let code = source_map[src].src.read().unwrap();
 
-    let interner = Rodeo::new();
-    let mut parser = Parser::new(&code, src, interner);
+    let mut interner = Rodeo::new();
+    let mut parser = Parser::new(&code, src, &mut interner);
 
     match parser.parse() {
         Ok(e) => {
-            let mut interpreter = Interpreter::new(parser.interner, source_map);
+            let mut interpreter = Interpreter::new(&mut interner, source_map);
             let global_scope = interpreter.scopes.insert(Scope {
                 vars: AHashMap::new(),
                 parent: None,
@@ -46,11 +46,14 @@ fn main() {
             ValueType::populate_scope(&mut interpreter, global_scope);
             Builtin::populate_scope(&mut interpreter, global_scope);
 
+            interpreter.src_stack.push(src);
+
             match interpreter.execute_list(&e, global_scope) {
-                Ok(k) => {
-                    println!("\n-> {}", interpreter.value_str(k))
+                Ok(_) => {
+                    interpreter.src_stack.pop();
                 }
                 Err(err) => {
+                    interpreter.src_stack.pop();
                     let err = match err {
                         Halt::Error(err) => err,
                         Halt::Jump(Jump::Return(_, area)) => RuntimeError::ReturnOutside { area },
